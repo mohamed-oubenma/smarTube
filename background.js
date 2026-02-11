@@ -350,9 +350,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else if (request.action === "askQuestion") {
         console.log("Background script received askQuestion request:", request.question, "for URL:", request.url);
 
-        chrome.storage.sync.get(['geminiApiKey', 'geminiModel'], (items) => {
+        chrome.storage.sync.get(['geminiApiKey', 'geminiModel', 'summaryLanguage'], (items) => {
             const geminiApiKey = items.geminiApiKey;
             const geminiModel = items.geminiModel || 'gemini-2.5-flash-lite';
+            const summaryLanguage = items.summaryLanguage || 'auto';
+            const languageInstruction = buildLanguageInstruction(summaryLanguage);
 
             if (!geminiApiKey || geminiApiKey.trim() === '') {
                 console.error("Gemini API Key missing or invalid for Q&A.");
@@ -371,7 +373,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         throw new Error("Cannot answer question: Transcript is empty or invalid.");
                     }
                     console.log("Transcript fetched for Q&A. Calling Gemini for question with model:", geminiModel);
-                    return callGeminiForQuestion(transcript, request.question, geminiApiKey, geminiModel);
+                    return callGeminiForQuestion(transcript, request.question, geminiApiKey, geminiModel, languageInstruction);
                 })
                 .then(answer => {
                     console.log("Sending answer back to content script.");
@@ -552,12 +554,13 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
 }
 
 // Function to ask a question about the transcript using Gemini API
-async function callGeminiForQuestion(transcriptText, question, geminiApiKey, geminiModel) {
+async function callGeminiForQuestion(transcriptText, question, geminiApiKey, geminiModel, languageInstruction = '') {
     console.log(`Calling Gemini API to answer question: "${question}" with model: ${geminiModel}`);
 
     const trimmedTranscript = truncateTranscript(transcriptText);
 
-    const prompt = `Based **only** on the following video transcript, answer the user's question. If the answer cannot be found in the transcript, say so.
+    const promptPrefix = languageInstruction ? `${languageInstruction}\n\n` : '';
+    const prompt = `${promptPrefix}Based **only** on the following video transcript, answer the user's question. If the answer cannot be found in the transcript, say so.
 Do not use any external knowledge.
 
 Transcript:

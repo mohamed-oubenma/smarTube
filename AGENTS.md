@@ -37,7 +37,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
   - A **sticky header** with the title (“SmarTube”), an **expand/minimize** button (`⤢` / `−`), and a **settings (⚙️)** button.
   - A body containing:
     - A **custom action buttons** area (user-defined reusable prompts; includes built-in “Summarize” and “Transcript” actions).
-    - A **messages/chat** area where actions, questions, and responses appear.
+    - A **messages/chat** area where actions, questions, and responses appear (user messages align right, assistant messages align left; lists render inside bubbles).
   - A **sticky footer** with a textarea (“Ask anything about this video...”) and a send button (➤).
 - Clicking the header (excluding header buttons) toggles collapse/expand via the `collapsed` class.
 - Clicking the settings button opens the extension options page.
@@ -65,7 +65,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 - The user enters a question and submits (Enter without Shift, or the send button).
 - The input is cleared; the question is appended to chat; a “Thinking…” placeholder is inserted.
 - `content.js` sends `askQuestion` to `background.js` with `{ question, url }`.
-- `background.js` fetches transcript (Supadata) and calls Gemini using a prompt that instructs the model to answer **based only on the transcript**.
+- `background.js` fetches transcript (Supadata) and calls Gemini using a prompt that instructs the model to answer **based only on the transcript**, in the configured `summaryLanguage`.
 - `background.js` sends an `answerResponse` message back to the content script, which replaces the placeholder with the Markdown-rendered answer (or an error).
 
 ### YouTube SPA Navigation Handling
@@ -92,7 +92,7 @@ YouTube navigates without full reloads; the extension handles this by:
   - Applied to the container via CSS variable `--summary-font-size`.
 - Summary language:
   - Stored as `summaryLanguage` (`auto`, `en`, `ar`, `fr`, `es`).
-  - `background.js` converts this into a language instruction injected into prompts.
+  - `background.js` converts this into a language instruction injected into prompts, including Q&A answers.
 
 ## Architecture / System Patterns
 
