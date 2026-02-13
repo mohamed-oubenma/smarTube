@@ -15,6 +15,12 @@ Transcript:
 ---`;
 const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata (no Gemini processing).`;
 const MAX_TRANSCRIPT_LENGTH = 300000;
+const TRANSCRIPT_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const TRANSCRIPT_CACHE_MAX_ENTRIES = 20;
+const TRANSCRIPT_CACHE_STORAGE_PREFIX = 'transcriptCache:';
+
+const transcriptMemoryCache = new Map();
+const inFlightTranscriptRequests = new Map();
 
 // Listen for messages from the content script
 console.log("SmarTube background service worker started.");
@@ -131,6 +137,264 @@ function truncateTranscript(text) {
     return text.substring(0, MAX_TRANSCRIPT_LENGTH);
 }
 
+function extractVideoIdFromUrl(videoUrl) {
+    if (typeof videoUrl !== 'string' || videoUrl.trim() === '') return null;
+
+    try {
+        const parsedUrl = new URL(videoUrl);
+        const videoId = parsedUrl.searchParams.get('v');
+        if (videoId && videoId.trim()) {
+            return videoId.trim();
+        }
+
+        if (parsedUrl.hostname.includes('youtu.be')) {
+            const pathVideoId = parsedUrl.pathname.replace(/^\/+/, '').split('/')[0];
+            if (pathVideoId) {
+                return pathVideoId.trim();
+            }
+        }
+    } catch (error) {
+        const match = videoUrl.match(/[?&]v=([^&]+)/);
+        if (match && match[1]) {
+            try {
+                return decodeURIComponent(match[1]).trim();
+            } catch (decodeError) {
+                return match[1].trim();
+            }
+        }
+    }
+
+    return null;
+}
+
+function getTranscriptCacheKey(videoUrl) {
+    const videoId = extractVideoIdFromUrl(videoUrl);
+    if (videoId) {
+        return `${TRANSCRIPT_CACHE_STORAGE_PREFIX}${videoId}`;
+    }
+
+    const fallbackKey = typeof videoUrl === 'string' && videoUrl.trim() ? videoUrl.trim() : 'unknown-url';
+    return `${TRANSCRIPT_CACHE_STORAGE_PREFIX}url:${encodeURIComponent(fallbackKey)}`;
+}
+
+function isTranscriptCacheEntryFresh(entry, now = Date.now()) {
+    if (!entry || typeof entry !== 'object') return false;
+    if (typeof entry.transcript !== 'string' || entry.transcript.trim().length === 0) return false;
+    if (typeof entry.cachedAt !== 'number') return false;
+    return (now - entry.cachedAt) < TRANSCRIPT_CACHE_TTL_MS;
+}
+
+function getCacheEntryLastAccess(entry) {
+    if (!entry || typeof entry !== 'object') return 0;
+    return entry.lastAccessedAt || entry.cachedAt || 0;
+}
+
+function pruneMemoryTranscriptCache() {
+    if (transcriptMemoryCache.size <= TRANSCRIPT_CACHE_MAX_ENTRIES) {
+        return;
+    }
+
+    const sortedEntries = [...transcriptMemoryCache.entries()]
+        .sort((a, b) => getCacheEntryLastAccess(b[1]) - getCacheEntryLastAccess(a[1]));
+
+    transcriptMemoryCache.clear();
+    sortedEntries.slice(0, TRANSCRIPT_CACHE_MAX_ENTRIES).forEach(([key, value]) => {
+        transcriptMemoryCache.set(key, value);
+    });
+}
+
+function hasSessionStorage() {
+    return Boolean(chrome?.storage?.session);
+}
+
+async function sessionStorageGet(keys) {
+    if (!hasSessionStorage()) return {};
+    return new Promise((resolve, reject) => {
+        chrome.storage.session.get(keys, (items) => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                reject(new Error(lastError.message));
+                return;
+            }
+            resolve(items || {});
+        });
+    });
+}
+
+async function sessionStorageSet(items) {
+    if (!hasSessionStorage()) return;
+    return new Promise((resolve, reject) => {
+        chrome.storage.session.set(items, () => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                reject(new Error(lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+async function sessionStorageRemove(keys) {
+    if (!hasSessionStorage()) return;
+    return new Promise((resolve, reject) => {
+        chrome.storage.session.remove(keys, () => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                reject(new Error(lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+async function pruneSessionTranscriptCache() {
+    if (!hasSessionStorage()) return;
+
+    const now = Date.now();
+
+    try {
+        const allSessionItems = await sessionStorageGet(null);
+        const cachedEntries = Object.entries(allSessionItems)
+            .filter(([key]) => key.startsWith(TRANSCRIPT_CACHE_STORAGE_PREFIX));
+
+        if (!cachedEntries.length) return;
+
+        const staleOrInvalidKeys = [];
+        const freshEntries = [];
+
+        cachedEntries.forEach(([key, value]) => {
+            if (isTranscriptCacheEntryFresh(value, now)) {
+                freshEntries.push([key, value]);
+            } else {
+                staleOrInvalidKeys.push(key);
+            }
+        });
+
+        if (staleOrInvalidKeys.length) {
+            await sessionStorageRemove(staleOrInvalidKeys);
+        }
+
+        if (freshEntries.length > TRANSCRIPT_CACHE_MAX_ENTRIES) {
+            const keysToRemove = freshEntries
+                .sort((a, b) => getCacheEntryLastAccess(b[1]) - getCacheEntryLastAccess(a[1]))
+                .slice(TRANSCRIPT_CACHE_MAX_ENTRIES)
+                .map(([key]) => key);
+
+            if (keysToRemove.length) {
+                await sessionStorageRemove(keysToRemove);
+            }
+        }
+    } catch (error) {
+        console.warn('[TranscriptCache] Failed to prune session cache:', error.message || error);
+    }
+}
+
+function buildTranscriptCacheEntry(videoUrl, transcriptText) {
+    const now = Date.now();
+    const videoId = extractVideoIdFromUrl(videoUrl);
+    return {
+        transcript: transcriptText,
+        videoId: videoId || null,
+        sourceUrl: videoUrl || '',
+        cachedAt: now,
+        lastAccessedAt: now
+    };
+}
+
+async function writeTranscriptCacheEntry(cacheKey, entry) {
+    transcriptMemoryCache.set(cacheKey, entry);
+    pruneMemoryTranscriptCache();
+
+    if (!hasSessionStorage()) return;
+
+    try {
+        await sessionStorageSet({ [cacheKey]: entry });
+        await pruneSessionTranscriptCache();
+    } catch (error) {
+        console.warn('[TranscriptCache] Failed to persist transcript cache entry:', error.message || error);
+    }
+}
+
+async function readTranscriptCacheEntry(cacheKey) {
+    const now = Date.now();
+    const memoryEntry = transcriptMemoryCache.get(cacheKey);
+
+    if (memoryEntry) {
+        if (isTranscriptCacheEntryFresh(memoryEntry, now)) {
+            const touchedEntry = { ...memoryEntry, lastAccessedAt: now };
+            transcriptMemoryCache.set(cacheKey, touchedEntry);
+            console.log(`[TranscriptCache] cache_hit(memory): ${cacheKey}`);
+            return touchedEntry;
+        }
+
+        transcriptMemoryCache.delete(cacheKey);
+    }
+
+    if (!hasSessionStorage()) {
+        return null;
+    }
+
+    try {
+        const sessionItems = await sessionStorageGet(cacheKey);
+        const sessionEntry = sessionItems[cacheKey];
+        if (!sessionEntry) return null;
+
+        if (!isTranscriptCacheEntryFresh(sessionEntry, now)) {
+            await sessionStorageRemove(cacheKey);
+            return null;
+        }
+
+        const touchedEntry = { ...sessionEntry, lastAccessedAt: now };
+        transcriptMemoryCache.set(cacheKey, touchedEntry);
+        pruneMemoryTranscriptCache();
+        // Best effort touch for LRU bookkeeping across service-worker restarts.
+        await sessionStorageSet({ [cacheKey]: touchedEntry });
+        console.log(`[TranscriptCache] cache_hit(session): ${cacheKey}`);
+        return touchedEntry;
+    } catch (error) {
+        console.warn('[TranscriptCache] Failed to read session cache entry:', error.message || error);
+        return null;
+    }
+}
+
+async function getTranscriptForVideo(videoUrl, options = {}) {
+    const { forceRefresh = false } = options;
+    const cacheKey = getTranscriptCacheKey(videoUrl);
+
+    if (!forceRefresh) {
+        const cachedEntry = await readTranscriptCacheEntry(cacheKey);
+        if (cachedEntry) {
+            return cachedEntry.transcript;
+        }
+    }
+
+    if (inFlightTranscriptRequests.has(cacheKey)) {
+        console.log(`[TranscriptCache] in_flight_reuse: ${cacheKey}`);
+        return inFlightTranscriptRequests.get(cacheKey);
+    }
+
+    console.log(`[TranscriptCache] cache_miss: ${cacheKey}`);
+    const fetchPromise = (async () => {
+        const transcript = await tryGetTranscriptRecursive(videoUrl);
+        if (!transcript || transcript.trim().length === 0) {
+            throw new Error("Received empty or invalid transcript from Supadata.");
+        }
+
+        const cacheEntry = buildTranscriptCacheEntry(videoUrl, transcript);
+        await writeTranscriptCacheEntry(cacheKey, cacheEntry);
+        return transcript;
+    })();
+
+    inFlightTranscriptRequests.set(cacheKey, fetchPromise);
+    try {
+        return await fetchPromise;
+    } finally {
+        inFlightTranscriptRequests.delete(cacheKey);
+    }
+}
+
 function buildPromptFromTemplate(template, { transcript, languageInstruction, videoUrl }) {
     const baseTemplate = typeof template === 'string' && template.trim().length > 0
         ? template
@@ -244,7 +508,7 @@ async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
     const actionLabel = labelForLogs || selectedAction.label;
     console.log(`Executing action "${actionLabel}" (mode: ${selectedAction.mode || 'gemini'})`);
 
-    const transcript = await tryGetTranscriptRecursive(videoUrl);
+    const transcript = await getTranscriptForVideo(videoUrl);
     if (!transcript || transcript.trim().length === 0) {
         throw new Error("Received empty or invalid transcript from Supadata.");
     }
@@ -367,7 +631,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             console.log("Gemini API Key and Model retrieved for Q&A. Model:", geminiModel);
 
-            tryGetTranscriptRecursive(request.url)
+            getTranscriptForVideo(request.url)
                 .then(transcript => {
                     if (!transcript || transcript.trim().length === 0) {
                         throw new Error("Cannot answer question: Transcript is empty or invalid.");
