@@ -57,7 +57,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
   - The action label is appended to the chat as a user message.
   - A placeholder message (e.g. “Summarize in progress…”) is inserted.
   - `content.js` sends `runCustomPrompt` to `background.js` with `{ actionId, url, label }`.
-  - `background.js` retrieves transcript through a per-video cache (memory + `chrome.storage.session`); on cache miss it fetches from Supadata, then either calls Gemini (`mode: gemini`) or returns the raw transcript (`mode: transcript`).
+  - `background.js` retrieves transcript through a per-video cache (memory + `chrome.storage.session`); on cache miss it fetches Supadata timestamped chunks (`/v1/transcript`, `text=false`) and normalizes them for prompt/display use, then either calls Gemini (`mode: gemini`) or returns the raw timestamped transcript (`mode: transcript`).
   - The placeholder is replaced with the Markdown-rendered result (Showdown.js).
 
 ### Q&A
@@ -65,7 +65,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 - The user enters a question and submits (Enter without Shift, or the send button).
 - The input is cleared; the question is appended to chat; a “Thinking…” placeholder is inserted.
 - `content.js` sends `askQuestion` to `background.js` with `{ question, url }`.
-- `background.js` reuses the same per-video transcript cache (fetching Supadata only on miss/expiry) and calls Gemini using a prompt that instructs the model to answer **based only on the transcript**, in the configured `summaryLanguage`.
+- `background.js` reuses the same per-video transcript cache (fetching Supadata only on miss/expiry) and calls Gemini using transcript text that includes timestamps, with a prompt that instructs the model to answer **based only on the transcript**, in the configured `summaryLanguage`.
 - `background.js` sends an `answerResponse` message back to the content script, which replaces the placeholder with the Markdown-rendered answer (or an error).
 
 ### YouTube SPA Navigation Handling
@@ -135,6 +135,8 @@ graph TD
 
 3) **Supadata key resilience:** background cycles keys on explicit rate-limit signals and tracks per-key `isRateLimited`, with an active-key pointer (`activeSupadataKeyId`).
 
+3.1) **Supadata async job handling:** when Supadata returns `202` with a `jobId`, `background.js` polls `/v1/transcript/{jobId}` until completion/failure and then normalizes timestamped transcript chunks.
+
 4) **Markdown rendering:** AI responses are treated as Markdown and converted via Showdown.js (`libs/showdown.min.js`) for display.
 
 5) **Theming via CSS vars:** base styles + `.dark-theme` overrides in `styles.css`; options page uses similar CSS-variable theming in `options.css`.
@@ -191,6 +193,7 @@ This project uses **MIT License with Commons Clause** (free for non-commercial u
 - YouTube’s DOM and navigation patterns change; injection depends on `#secondary` and URL `v=`. Keep SPA handling defensive.
 - `background.js` truncates long transcripts to avoid oversized prompts.
 - `background.js` caches Supadata transcripts per video for a short TTL (currently 6 hours) and limits cache size (LRU-style) to reduce repeated API calls.
+- Supadata transcript requests use `GET /v1/transcript` with timestamped output (`text=false`), and may require async polling when the API returns `202`.
 - `background.js` still supports a legacy `getSummary` message handler; the current UI primarily uses `runCustomPrompt` + `askQuestion`.
 
 ## Status / Progress (high-level)

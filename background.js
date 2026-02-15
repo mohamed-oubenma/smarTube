@@ -1,7 +1,7 @@
 // background.js - Handles API calls and communication
 
 // Constants
-const SUPADATA_API_BASE_URL = "https://api.supadata.ai/v1/youtube/transcript";
+const SUPADATA_API_BASE_URL = "https://api.supadata.ai/v1/transcript";
 const API_KEYS_MISSING_ERROR = "API_KEYS_MISSING"; // Constant for error type
 const DEFAULT_ACTION_ID = 'default-summary';
 const TRANSCRIPT_ACTION_ID = 'view-transcript';
@@ -13,11 +13,13 @@ Transcript:
 ---
 {{transcript}}
 ---`;
-const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata (no Gemini processing).`;
+const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
 const MAX_TRANSCRIPT_LENGTH = 300000;
 const TRANSCRIPT_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const TRANSCRIPT_CACHE_MAX_ENTRIES = 20;
 const TRANSCRIPT_CACHE_STORAGE_PREFIX = 'transcriptCache:';
+const SUPADATA_JOB_POLL_INTERVAL_MS = 1000;
+const SUPADATA_JOB_MAX_POLLS = 90;
 
 const transcriptMemoryCache = new Map();
 const inFlightTranscriptRequests = new Map();
@@ -137,6 +139,110 @@ function truncateTranscript(text) {
     return text.substring(0, MAX_TRANSCRIPT_LENGTH);
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function formatTimestampFromMs(milliseconds) {
+    const safeMs = Number(milliseconds);
+    const totalSeconds = Number.isFinite(safeMs) && safeMs >= 0 ? Math.floor(safeMs / 1000) : 0;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function buildTimestampedTranscriptText(chunks) {
+    if (!Array.isArray(chunks) || chunks.length === 0) {
+        return '';
+    }
+
+    return chunks
+        .map(chunk => `[${formatTimestampFromMs(chunk.offset)}] ${chunk.text}`)
+        .join('\n');
+}
+
+function normalizeSupadataTranscriptPayload(payload) {
+    const hasResultContent = payload
+        && typeof payload === 'object'
+        && payload.result
+        && typeof payload.result === 'object'
+        && (Array.isArray(payload.result.content) || typeof payload.result.content === 'string');
+    const effectivePayload = hasResultContent ? payload.result : payload;
+
+    if (!effectivePayload || typeof effectivePayload !== 'object') {
+        throw new Error("Supadata transcript payload is invalid.");
+    }
+
+    const { content } = effectivePayload;
+    const availableLangs = Array.isArray(effectivePayload.availableLangs)
+        ? effectivePayload.availableLangs.filter(lang => typeof lang === 'string' && lang.trim().length > 0)
+        : [];
+    const lang = typeof effectivePayload.lang === 'string' && effectivePayload.lang.trim().length > 0
+        ? effectivePayload.lang.trim()
+        : null;
+
+    if (Array.isArray(content)) {
+        const chunks = content
+            .map(chunk => {
+                if (!chunk || typeof chunk !== 'object') return null;
+                const text = typeof chunk.text === 'string' ? chunk.text.trim() : '';
+                if (!text) return null;
+
+                const offset = Number.isFinite(Number(chunk.offset)) ? Number(chunk.offset) : 0;
+                const duration = Number.isFinite(Number(chunk.duration)) ? Number(chunk.duration) : 0;
+                const chunkLang = typeof chunk.lang === 'string' && chunk.lang.trim().length > 0
+                    ? chunk.lang.trim()
+                    : null;
+
+                return { text, offset, duration, lang: chunkLang };
+            })
+            .filter(Boolean);
+
+        if (!chunks.length) {
+            throw new Error("Supadata transcript content is empty.");
+        }
+
+        const timestampedText = buildTimestampedTranscriptText(chunks);
+        const plainText = chunks.map(chunk => chunk.text).join(' ').trim();
+
+        return { chunks, timestampedText, plainText, lang, availableLangs };
+    }
+
+    if (typeof content === 'string') {
+        const text = content.trim();
+        if (!text) {
+            throw new Error("Supadata transcript text is empty.");
+        }
+        return { chunks: [], timestampedText: text, plainText: text, lang, availableLangs };
+    }
+
+    throw new Error("Could not extract transcript content from Supadata API response.");
+}
+
+function hasTranscriptText(transcriptData) {
+    if (!transcriptData || typeof transcriptData !== 'object') return false;
+    const timestampedText = typeof transcriptData.timestampedText === 'string' ? transcriptData.timestampedText.trim() : '';
+    const plainText = typeof transcriptData.plainText === 'string' ? transcriptData.plainText.trim() : '';
+    return timestampedText.length > 0 || plainText.length > 0;
+}
+
+function getTranscriptTextForPrompt(transcriptData) {
+    if (!transcriptData || typeof transcriptData !== 'object') return '';
+    if (typeof transcriptData.timestampedText === 'string' && transcriptData.timestampedText.trim().length > 0) {
+        return transcriptData.timestampedText;
+    }
+    if (typeof transcriptData.plainText === 'string') {
+        return transcriptData.plainText;
+    }
+    return '';
+}
+
 function extractVideoIdFromUrl(videoUrl) {
     if (typeof videoUrl !== 'string' || videoUrl.trim() === '') return null;
 
@@ -179,7 +285,7 @@ function getTranscriptCacheKey(videoUrl) {
 
 function isTranscriptCacheEntryFresh(entry, now = Date.now()) {
     if (!entry || typeof entry !== 'object') return false;
-    if (typeof entry.transcript !== 'string' || entry.transcript.trim().length === 0) return false;
+    if (!hasTranscriptText(entry.transcriptData)) return false;
     if (typeof entry.cachedAt !== 'number') return false;
     return (now - entry.cachedAt) < TRANSCRIPT_CACHE_TTL_MS;
 }
@@ -291,11 +397,11 @@ async function pruneSessionTranscriptCache() {
     }
 }
 
-function buildTranscriptCacheEntry(videoUrl, transcriptText) {
+function buildTranscriptCacheEntry(videoUrl, transcriptData) {
     const now = Date.now();
     const videoId = extractVideoIdFromUrl(videoUrl);
     return {
-        transcript: transcriptText,
+        transcriptData,
         videoId: videoId || null,
         sourceUrl: videoUrl || '',
         cachedAt: now,
@@ -366,7 +472,7 @@ async function getTranscriptForVideo(videoUrl, options = {}) {
     if (!forceRefresh) {
         const cachedEntry = await readTranscriptCacheEntry(cacheKey);
         if (cachedEntry) {
-            return cachedEntry.transcript;
+            return cachedEntry.transcriptData;
         }
     }
 
@@ -377,14 +483,14 @@ async function getTranscriptForVideo(videoUrl, options = {}) {
 
     console.log(`[TranscriptCache] cache_miss: ${cacheKey}`);
     const fetchPromise = (async () => {
-        const transcript = await tryGetTranscriptRecursive(videoUrl);
-        if (!transcript || transcript.trim().length === 0) {
+        const transcriptData = await tryGetTranscriptRecursive(videoUrl);
+        if (!hasTranscriptText(transcriptData)) {
             throw new Error("Received empty or invalid transcript from Supadata.");
         }
 
-        const cacheEntry = buildTranscriptCacheEntry(videoUrl, transcript);
+        const cacheEntry = buildTranscriptCacheEntry(videoUrl, transcriptData);
         await writeTranscriptCacheEntry(cacheKey, cacheEntry);
-        return transcript;
+        return transcriptData;
     })();
 
     inFlightTranscriptRequests.set(cacheKey, fetchPromise);
@@ -508,14 +614,15 @@ async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
     const actionLabel = labelForLogs || selectedAction.label;
     console.log(`Executing action "${actionLabel}" (mode: ${selectedAction.mode || 'gemini'})`);
 
-    const transcript = await getTranscriptForVideo(videoUrl);
-    if (!transcript || transcript.trim().length === 0) {
+    const transcriptData = await getTranscriptForVideo(videoUrl);
+    const transcriptText = getTranscriptTextForPrompt(transcriptData);
+    if (!transcriptText || transcriptText.trim().length === 0) {
         throw new Error("Received empty or invalid transcript from Supadata.");
     }
 
     if (selectedAction.mode === 'transcript') {
         const heading = selectedAction.prompt?.trim() || TRANSCRIPT_ACTION_PROMPT.trim();
-        const content = `${heading}\n\n\`\`\`\n${transcript}\n\`\`\``;
+        const content = `${heading}\n\n\`\`\`\n${transcriptText}\n\`\`\``;
         return { content, actionLabel };
     }
 
@@ -523,7 +630,7 @@ async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
         throw new Error(API_KEYS_MISSING_ERROR);
     }
 
-    const truncatedTranscript = truncateTranscript(transcript);
+    const truncatedTranscript = truncateTranscript(transcriptText);
     const languageInstruction = buildLanguageInstruction(summaryLanguage);
     const finalPrompt = buildPromptFromTemplate(selectedAction.prompt, {
         transcript: truncatedTranscript,
@@ -632,12 +739,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log("Gemini API Key and Model retrieved for Q&A. Model:", geminiModel);
 
             getTranscriptForVideo(request.url)
-                .then(transcript => {
-                    if (!transcript || transcript.trim().length === 0) {
+                .then(transcriptData => {
+                    const transcriptText = getTranscriptTextForPrompt(transcriptData);
+                    if (!transcriptText || transcriptText.trim().length === 0) {
                         throw new Error("Cannot answer question: Transcript is empty or invalid.");
                     }
                     console.log("Transcript fetched for Q&A. Calling Gemini for question with model:", geminiModel);
-                    return callGeminiForQuestion(transcript, request.question, geminiApiKey, geminiModel, languageInstruction);
+                    return callGeminiForQuestion(transcriptText, request.question, geminiApiKey, geminiModel, languageInstruction);
                 })
                 .then(answer => {
                     console.log("Sending answer back to content script.");
@@ -666,6 +774,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // --- Supadata API Key Management and Transcript Fetching ---
+
+function isSupadataRateLimitError(statusCode, errorDetail = '') {
+    const detail = String(errorDetail || '').toLowerCase();
+    return statusCode === 429 || detail.includes("rate limit") || detail.includes("quota exceeded");
+}
+
+async function pollSupadataTranscriptJob(jobId, apiKey) {
+    const jobStatusUrl = `${SUPADATA_API_BASE_URL}/${encodeURIComponent(jobId)}`;
+
+    for (let attempt = 1; attempt <= SUPADATA_JOB_MAX_POLLS; attempt++) {
+        const response = await fetch(jobStatusUrl, {
+            method: 'GET',
+            headers: { 'x-api-key': apiKey, 'Accept': 'application/json' }
+        });
+
+        let data = {};
+        try { data = await response.json(); } catch (e) { /* Ignore JSON parse errors */ }
+
+        if (!response.ok) {
+            const errorDetail = data?.message || data?.error?.message || response.statusText;
+            const error = new Error(`Supadata transcript job polling failed (${response.status}): ${errorDetail}`);
+            error.status = response.status;
+            throw error;
+        }
+
+        const status = typeof data?.status === 'string' ? data.status.toLowerCase() : '';
+        if (status === 'completed') {
+            return data;
+        }
+
+        if (status === 'failed') {
+            const failureDetail = data?.message || data?.error?.message || "Unknown error";
+            throw new Error(`Supadata transcript job failed: ${failureDetail}`);
+        }
+
+        if (Array.isArray(data?.content) || typeof data?.content === 'string') {
+            return data;
+        }
+
+        if (attempt < SUPADATA_JOB_MAX_POLLS) {
+            await sleep(SUPADATA_JOB_POLL_INTERVAL_MS);
+        }
+    }
+
+    throw new Error(`Supadata transcript job timed out after ${SUPADATA_JOB_MAX_POLLS} polls.`);
+}
 
 async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds = new Set()) {
     return new Promise((resolve, reject) => {
@@ -710,7 +864,7 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
             triedKeyIds.add(activeKeyObj.id);
 
             console.log(`Attempting Supadata API call with key: ${activeKeyObj.name || activeKeyObj.id} (Attempt: ${attemptCycle + 1})`);
-            const transcriptUrl = `${SUPADATA_API_BASE_URL}?url=${encodeURIComponent(videoUrl)}&text=true`;
+            const transcriptUrl = `${SUPADATA_API_BASE_URL}?url=${encodeURIComponent(videoUrl)}&text=false`;
 
             try {
                 const response = await fetch(transcriptUrl, {
@@ -725,7 +879,7 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
                     console.error(`Supadata API Error (${response.status}) with key ${activeKeyObj.id}: ${errorDetail}`);
 
                     // Check for rate limit status (429) or explicit rate limit messages in the error detail
-                    if (response.status === 429 || errorDetail.toLowerCase().includes("rate limit") || errorDetail.toLowerCase().includes("quota exceeded")) {
+                    if (isSupadataRateLimitError(response.status, errorDetail)) {
                         // Mark current key as rate-limited
                         const keyIndex = supadataApiKeys.findIndex(k => k.id === activeKeyObj.id);
                         if (keyIndex !== -1) {
@@ -734,7 +888,6 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
                         
                         // Find next available key that hasn't been tried in this cycle
                         let nextKeyToTry = null;
-                        let nextKeyId = null;
                         for (let i = 0; i < supadataApiKeys.length; i++) {
                             const potentialNextKey = supadataApiKeys[(keyIndex + 1 + i) % supadataApiKeys.length];
                             if (!potentialNextKey.isRateLimited && !triedKeyIds.has(potentialNextKey.id)) {
@@ -763,18 +916,29 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
                 }
 
                 const data = await response.json();
-                if (data && typeof data.content === 'string') {
-                    console.log(`Transcript fetched successfully with key: ${activeKeyObj.id}`);
-                    // If successful, reset its rate-limited status (optimistic)
-                    const keyIndex = supadataApiKeys.findIndex(k => k.id === activeKeyObj.id);
-                    if (keyIndex !== -1 && supadataApiKeys[keyIndex].isRateLimited) {
-                        supadataApiKeys[keyIndex].isRateLimited = false;
-                        await chrome.storage.sync.set({ supadataApiKeys: [...supadataApiKeys] });
+                let transcriptPayload = data;
+
+                if (response.status === 202) {
+                    const jobId = data?.jobId;
+                    if (!jobId || typeof jobId !== 'string') {
+                        throw new Error("Supadata accepted transcript job but returned no jobId.");
                     }
-                    resolve(data.content);
-                } else {
-                    throw new Error("Could not extract transcript content from Supadata API response.");
+
+                    console.log(`Supadata transcript job queued (${jobId}). Polling for completion...`);
+                    transcriptPayload = await pollSupadataTranscriptJob(jobId, activeKeyObj.key);
                 }
+
+                const normalizedTranscript = normalizeSupadataTranscriptPayload(transcriptPayload);
+                console.log(`Transcript fetched successfully with key: ${activeKeyObj.id}`);
+
+                // If successful, reset its rate-limited status (optimistic)
+                const keyIndex = supadataApiKeys.findIndex(k => k.id === activeKeyObj.id);
+                if (keyIndex !== -1 && supadataApiKeys[keyIndex].isRateLimited) {
+                    supadataApiKeys[keyIndex].isRateLimited = false;
+                    await chrome.storage.sync.set({ supadataApiKeys: [...supadataApiKeys] });
+                }
+
+                resolve(normalizedTranscript);
 
             } catch (error) {
                 console.error('Error during fetch to Supadata API:', error);
@@ -785,6 +949,11 @@ async function tryGetTranscriptRecursive(videoUrl, attemptCycle = 0, triedKeyIds
                 
                 // Mark current key as potentially problematic (similar to rate limit for cycling)
                 const keyIndex = supadataApiKeys.findIndex(k => k.id === activeKeyObj.id);
+                const errorStatus = Number.isFinite(Number(error?.status)) ? Number(error.status) : 0;
+                const errorDetail = error?.message || '';
+                if (keyIndex !== -1 && isSupadataRateLimitError(errorStatus, errorDetail)) {
+                    supadataApiKeys[keyIndex].isRateLimited = true;
+                }
                  // For generic fetch errors (e.g., network issues), do NOT mark the key as rate-limited.
                  // A key should only be marked as rate-limited if the API explicitly returns a rate limit status (429)
                  // or a rate limit message. The key cycling logic will still attempt to try other keys if the current
