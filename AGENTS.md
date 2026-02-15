@@ -48,7 +48,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 
 ### Summary / Custom Actions
 
-- Built-in actions include “Summarize” (Gemini prompt) and “Transcript” (raw Supadata transcript, no Gemini processing).
+- Built-in actions include “Summarize” (Gemini prompt), “Transcript + Time” (timestamped Supadata transcript), and “Transcript Text” (plain transcript text only).
 - Gemini-mode actions (default) use a prompt template. Supported placeholders:
   - `{{transcript}}`
   - `{{language_instruction}}`
@@ -57,8 +57,9 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
   - The action label is appended to the chat as a user message.
   - A placeholder message (e.g. “Summarize in progress…”) is inserted.
   - `content.js` sends `runCustomPrompt` to `background.js` with `{ actionId, url, label }`.
-  - `background.js` retrieves transcript through a per-video cache (memory + `chrome.storage.session`); on cache miss it fetches Supadata timestamped chunks (`/v1/transcript`, `text=false`) and normalizes them for prompt/display use, then either calls Gemini (`mode: gemini`) or returns the raw timestamped transcript (`mode: transcript`).
+  - `background.js` retrieves transcript through a per-video cache (memory + `chrome.storage.session`); on cache miss it fetches Supadata timestamped chunks (`/v1/transcript`, `text=false`) and normalizes them for prompt/display use, then either calls Gemini (`mode: gemini`) or returns timestamped/plain transcript output (`mode: transcript_timestamps` / `mode: transcript_text`).
   - The placeholder is replaced with the Markdown-rendered result (Showdown.js).
+  - Timestamp labels rendered in assistant messages are clickable and seek the YouTube player to the matching time.
 
 ### Q&A
 
@@ -131,7 +132,7 @@ graph TD
 - `initialCollapsed`
 - `summaryLanguage`
 - `fontSize`
-- `customActionButtons`: array of `{ id, label, prompt, mode }` (includes built-in actions)
+- `customActionButtons`: array of `{ id, label, prompt, mode }` (includes built-ins; `mode` can be `gemini`, `transcript_timestamps`, or `transcript_text`)
 
 3) **Supadata key resilience:** background cycles keys on explicit rate-limit signals and tracks per-key `isRateLimited`, with an active-key pointer (`activeSupadataKeyId`).
 
@@ -202,7 +203,7 @@ Implemented and working:
 - Injected UI panel with collapse, settings button, theme support.
 - Transcript fetching via Supadata with multi-key management + cycling.
 - Gemini summarization + transcript-grounded Q&A.
-- Built-in Transcript action (transcript-only mode) and action type badges in options.
+- Built-in transcript actions (timestamped + plain text modes) and action type badges in options.
 - Markdown rendering (Showdown), font size control, Arabic RTL detection.
 - Robust navigation handling (History API + MutationObserver).
 - Options page for keys, model selection, theme, language, collapse, font size, and custom action buttons.

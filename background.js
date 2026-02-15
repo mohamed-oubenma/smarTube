@@ -4,7 +4,8 @@
 const SUPADATA_API_BASE_URL = "https://api.supadata.ai/v1/transcript";
 const API_KEYS_MISSING_ERROR = "API_KEYS_MISSING"; // Constant for error type
 const DEFAULT_ACTION_ID = 'default-summary';
-const TRANSCRIPT_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TIMESTAMPS_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TEXT_ACTION_ID = 'view-transcript-text';
 const DEFAULT_ACTION_PROMPT = `{{language_instruction}}
 Summarize the following video transcript into concise key points, then provide a bullet list of highlights annotated with fitting emojis.
 Enforce standard numeral formatting using digits 0-9 regardless of language.
@@ -13,7 +14,8 @@ Transcript:
 ---
 {{transcript}}
 ---`;
-const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
+const TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
+const TRANSCRIPT_TEXT_ACTION_PROMPT = `Raw transcript text only from Supadata (no Gemini processing).`;
 const MAX_TRANSCRIPT_LENGTH = 300000;
 const TRANSCRIPT_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const TRANSCRIPT_CACHE_MAX_ENTRIES = 20;
@@ -39,12 +41,42 @@ function getDefaultAction() {
     };
 }
 
-function getTranscriptAction() {
+function normalizeActionMode(mode) {
+    if (mode === 'transcript' || mode === 'transcript_timestamps') {
+        return 'transcript_timestamps';
+    }
+    if (mode === 'transcript_text') {
+        return 'transcript_text';
+    }
+    return 'gemini';
+}
+
+function isTranscriptMode(mode) {
+    return mode === 'transcript_timestamps' || mode === 'transcript_text';
+}
+
+function getTranscriptPromptForMode(mode) {
+    if (mode === 'transcript_text') {
+        return TRANSCRIPT_TEXT_ACTION_PROMPT.trim();
+    }
+    return TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim();
+}
+
+function getTranscriptTimestampsAction() {
     return {
-        id: TRANSCRIPT_ACTION_ID,
-        label: 'Transcript',
-        prompt: TRANSCRIPT_ACTION_PROMPT.trim(),
-        mode: 'transcript'
+        id: TRANSCRIPT_TIMESTAMPS_ACTION_ID,
+        label: 'Transcript + Time',
+        prompt: TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim(),
+        mode: 'transcript_timestamps'
+    };
+}
+
+function getTranscriptTextAction() {
+    return {
+        id: TRANSCRIPT_TEXT_ACTION_ID,
+        label: 'Transcript Text',
+        prompt: TRANSCRIPT_TEXT_ACTION_PROMPT.trim(),
+        mode: 'transcript_text'
     };
 }
 
@@ -63,7 +95,7 @@ function ensureCustomActions(actions = []) {
             let id = typeof action.id === 'string' ? action.id.trim() : '';
             const label = typeof action.label === 'string' ? action.label.trim() : '';
             let prompt = typeof action.prompt === 'string' ? action.prompt.trim() : '';
-            const mode = action.mode === 'transcript' ? 'transcript' : 'gemini';
+            const mode = normalizeActionMode(action.mode);
 
             if (!label) {
                 mutated = true;
@@ -86,8 +118,8 @@ function ensureCustomActions(actions = []) {
                 return;
             }
 
-            if (mode === 'transcript' && !prompt) {
-                prompt = TRANSCRIPT_ACTION_PROMPT.trim();
+            if (isTranscriptMode(mode) && !prompt) {
+                prompt = getTranscriptPromptForMode(mode);
                 mutated = true;
             }
 
@@ -97,7 +129,8 @@ function ensureCustomActions(actions = []) {
 
     if (!cleaned.length) {
         cleaned.push(getDefaultAction());
-        cleaned.push(getTranscriptAction());
+        cleaned.push(getTranscriptTimestampsAction());
+        cleaned.push(getTranscriptTextAction());
         return { actions: cleaned, mutated: true };
     }
 
@@ -106,8 +139,13 @@ function ensureCustomActions(actions = []) {
         mutated = true;
     }
 
-    if (!cleaned.some(action => action.id === TRANSCRIPT_ACTION_ID)) {
-        cleaned.splice(1, 0, getTranscriptAction());
+    if (!cleaned.some(action => action.id === TRANSCRIPT_TIMESTAMPS_ACTION_ID)) {
+        cleaned.splice(1, 0, getTranscriptTimestampsAction());
+        mutated = true;
+    }
+
+    if (!cleaned.some(action => action.id === TRANSCRIPT_TEXT_ACTION_ID)) {
+        cleaned.splice(2, 0, getTranscriptTextAction());
         mutated = true;
     }
 
@@ -165,6 +203,22 @@ function buildTimestampedTranscriptText(chunks) {
     return chunks
         .map(chunk => `[${formatTimestampFromMs(chunk.offset)}] ${chunk.text}`)
         .join('\n');
+}
+
+function escapeMarkdownInlineText(text) {
+    return String(text || '').replace(/([\\`*_[\]()])/g, '\\$1');
+}
+
+function buildTranscriptTimestampMarkdown(chunks) {
+    if (!Array.isArray(chunks) || chunks.length === 0) {
+        return '';
+    }
+
+    return chunks.map(chunk => {
+        const timestampLabel = formatTimestampFromMs(chunk.offset);
+        const safeText = escapeMarkdownInlineText(chunk.text);
+        return `- [${timestampLabel}] ${safeText}`;
+    }).join('\n');
 }
 
 function normalizeSupadataTranscriptPayload(payload) {
@@ -620,9 +674,21 @@ async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
         throw new Error("Received empty or invalid transcript from Supadata.");
     }
 
-    if (selectedAction.mode === 'transcript') {
-        const heading = selectedAction.prompt?.trim() || TRANSCRIPT_ACTION_PROMPT.trim();
-        const content = `${heading}\n\n\`\`\`\n${transcriptText}\n\`\`\``;
+    if (selectedAction.mode === 'transcript_timestamps') {
+        const heading = selectedAction.prompt?.trim() || TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim();
+        const timestampMarkdown = buildTranscriptTimestampMarkdown(transcriptData.chunks);
+        const fallbackTranscript = transcriptText;
+        const transcriptBody = timestampMarkdown || fallbackTranscript;
+        const content = `${heading}\n\n${transcriptBody}`;
+        return { content, actionLabel };
+    }
+
+    if (selectedAction.mode === 'transcript_text') {
+        const heading = selectedAction.prompt?.trim() || TRANSCRIPT_TEXT_ACTION_PROMPT.trim();
+        const plainLines = Array.isArray(transcriptData.chunks) && transcriptData.chunks.length > 0
+            ? transcriptData.chunks.map(chunk => chunk.text).join('\n')
+            : (transcriptData.plainText || transcriptText);
+        const content = `${heading}\n\n\`\`\`\n${plainLines}\n\`\`\``;
         return { content, actionLabel };
     }
 

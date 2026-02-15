@@ -1,5 +1,6 @@
 const DEFAULT_ACTION_ID = 'default-summary';
-const TRANSCRIPT_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TIMESTAMPS_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TEXT_ACTION_ID = 'view-transcript-text';
 const DEFAULT_ACTION_PROMPT = `{{language_instruction}}
 Summarize the following video transcript into concise key points, then provide a bullet list of highlights annotated with fitting emojis.
 Enforce standard numeral formatting using digits 0-9 regardless of language.
@@ -8,7 +9,8 @@ Transcript:
 ---
 {{transcript}}
 ---`;
-const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata (no Gemini processing).`;
+const TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
+const TRANSCRIPT_TEXT_ACTION_PROMPT = `Raw transcript text only from Supadata (no Gemini processing).`;
 
 let customActionsState = [];
 let currentCustomActionEditId = null;
@@ -26,12 +28,42 @@ function getDefaultAction() {
     };
 }
 
-function getTranscriptAction() {
+function normalizeActionMode(mode) {
+    if (mode === 'transcript' || mode === 'transcript_timestamps') {
+        return 'transcript_timestamps';
+    }
+    if (mode === 'transcript_text') {
+        return 'transcript_text';
+    }
+    return 'gemini';
+}
+
+function isTranscriptMode(mode) {
+    return mode === 'transcript_timestamps' || mode === 'transcript_text';
+}
+
+function getTranscriptPromptForMode(mode) {
+    if (mode === 'transcript_text') {
+        return TRANSCRIPT_TEXT_ACTION_PROMPT.trim();
+    }
+    return TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim();
+}
+
+function getTranscriptTimestampsAction() {
     return {
-        id: TRANSCRIPT_ACTION_ID,
-        label: 'Transcript',
-        prompt: TRANSCRIPT_ACTION_PROMPT.trim(),
-        mode: 'transcript'
+        id: TRANSCRIPT_TIMESTAMPS_ACTION_ID,
+        label: 'Transcript + Time',
+        prompt: TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim(),
+        mode: 'transcript_timestamps'
+    };
+}
+
+function getTranscriptTextAction() {
+    return {
+        id: TRANSCRIPT_TEXT_ACTION_ID,
+        label: 'Transcript Text',
+        prompt: TRANSCRIPT_TEXT_ACTION_PROMPT.trim(),
+        mode: 'transcript_text'
     };
 }
 
@@ -49,7 +81,7 @@ function sanitizeCustomActions(actions = []) {
             const label = typeof rawAction.label === 'string' ? rawAction.label.trim() : '';
             let prompt = typeof rawAction.prompt === 'string' ? rawAction.prompt.trim() : '';
             let id = typeof rawAction.id === 'string' ? rawAction.id.trim() : '';
-            const mode = rawAction.mode === 'transcript' ? 'transcript' : 'gemini';
+            const mode = normalizeActionMode(rawAction.mode);
 
             if (!label) {
                 mutated = true;
@@ -70,8 +102,8 @@ function sanitizeCustomActions(actions = []) {
                 return;
             }
 
-            if (mode === 'transcript' && !prompt) {
-                prompt = TRANSCRIPT_ACTION_PROMPT.trim();
+            if (isTranscriptMode(mode) && !prompt) {
+                prompt = getTranscriptPromptForMode(mode);
                 mutated = true;
             }
 
@@ -82,7 +114,8 @@ function sanitizeCustomActions(actions = []) {
 
     if (sanitized.length === 0) {
         sanitized.push(getDefaultAction());
-        sanitized.push(getTranscriptAction());
+        sanitized.push(getTranscriptTimestampsAction());
+        sanitized.push(getTranscriptTextAction());
         return { actions: sanitized, mutated: true };
     }
 
@@ -91,8 +124,13 @@ function sanitizeCustomActions(actions = []) {
         mutated = true;
     }
 
-    if (!sanitized.some(action => action.id === TRANSCRIPT_ACTION_ID)) {
-        sanitized.splice(1, 0, getTranscriptAction());
+    if (!sanitized.some(action => action.id === TRANSCRIPT_TIMESTAMPS_ACTION_ID)) {
+        sanitized.splice(1, 0, getTranscriptTimestampsAction());
+        mutated = true;
+    }
+
+    if (!sanitized.some(action => action.id === TRANSCRIPT_TEXT_ACTION_ID)) {
+        sanitized.splice(2, 0, getTranscriptTextAction());
         mutated = true;
     }
 
@@ -178,9 +216,16 @@ function renderCustomActionsList(actions = []) {
         title.textContent = action.label;
         titleGroup.appendChild(title);
 
+        const normalizedMode = normalizeActionMode(action.mode);
         const typeBadge = document.createElement('span');
-        typeBadge.className = `custom-action-type ${action.mode === 'transcript' ? 'type-transcript' : 'type-gemini'}`;
-        typeBadge.textContent = action.mode === 'transcript' ? 'Transcript only' : 'Gemini prompt';
+        typeBadge.className = `custom-action-type ${isTranscriptMode(normalizedMode) ? 'type-transcript' : 'type-gemini'}`;
+        if (normalizedMode === 'transcript_timestamps') {
+            typeBadge.textContent = 'Transcript + time';
+        } else if (normalizedMode === 'transcript_text') {
+            typeBadge.textContent = 'Transcript text';
+        } else {
+            typeBadge.textContent = 'Gemini prompt';
+        }
         titleGroup.appendChild(typeBadge);
 
         header.appendChild(titleGroup);
@@ -307,7 +352,11 @@ function handleDeleteCustomAction(actionId) {
         return;
     }
 
-    if (action.id === DEFAULT_ACTION_ID || action.id === TRANSCRIPT_ACTION_ID) {
+    if (
+        action.id === DEFAULT_ACTION_ID
+        || action.id === TRANSCRIPT_TIMESTAMPS_ACTION_ID
+        || action.id === TRANSCRIPT_TEXT_ACTION_ID
+    ) {
         showStatus('Built-in actions cannot be deleted.', 'red', 1800);
         return;
     }

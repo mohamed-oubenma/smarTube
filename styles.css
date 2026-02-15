@@ -277,6 +277,17 @@
     margin: 4px 0;
 }
 
+.message a.timestamp-link-ext {
+    color: #065fd4;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 600;
+}
+
+.message a.timestamp-link-ext:hover {
+    color: #0b57d0;
+}
+
 .user-message {
     background-color: #e1e1e1; /* Light grey for user */
     color: #333;
@@ -405,6 +416,14 @@
 #youtube-summary-container-ext.dark-theme .assistant-message {
     background-color: #404040; /* Slightly lighter dark grey for assistant */
     color: #eee;
+}
+
+#youtube-summary-container-ext.dark-theme .message a.timestamp-link-ext {
+    color: #8ab4f8;
+}
+
+#youtube-summary-container-ext.dark-theme .message a.timestamp-link-ext:hover {
+    color: #aecbfa;
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message#thinking-placeholder i,

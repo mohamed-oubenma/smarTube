@@ -9,7 +9,8 @@ let summaryOriginalParent = null;
 let summaryOriginalNextSibling = null;
 
 const DEFAULT_ACTION_ID = 'default-summary';
-const TRANSCRIPT_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TIMESTAMPS_ACTION_ID = 'view-transcript';
+const TRANSCRIPT_TEXT_ACTION_ID = 'view-transcript-text';
 const DEFAULT_ACTION_PROMPT = `{{language_instruction}}
 Summarize the following video transcript into concise key points, then provide a bullet list of highlights annotated with fitting emojis.
 Enforce standard numeral formatting using digits 0-9 regardless of language.
@@ -18,7 +19,9 @@ Transcript:
 ---
 {{transcript}}
 ---`;
-const TRANSCRIPT_ACTION_PROMPT = `Raw transcript from Supadata (no Gemini processing).`;
+const TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
+const TRANSCRIPT_TEXT_ACTION_PROMPT = `Raw transcript text only from Supadata (no Gemini processing).`;
+const TIMESTAMP_LINK_CLASS = 'timestamp-link-ext';
 
 const OVERLAY_BACKDROP_ID = 'youtube-summary-overlay-backdrop-ext';
 
@@ -124,12 +127,42 @@ function getDefaultAction() {
     };
 }
 
-function getTranscriptAction() {
+function normalizeActionMode(mode) {
+    if (mode === 'transcript' || mode === 'transcript_timestamps') {
+        return 'transcript_timestamps';
+    }
+    if (mode === 'transcript_text') {
+        return 'transcript_text';
+    }
+    return 'gemini';
+}
+
+function isTranscriptMode(mode) {
+    return mode === 'transcript_timestamps' || mode === 'transcript_text';
+}
+
+function getTranscriptPromptForMode(mode) {
+    if (mode === 'transcript_text') {
+        return TRANSCRIPT_TEXT_ACTION_PROMPT.trim();
+    }
+    return TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim();
+}
+
+function getTranscriptTimestampsAction() {
     return {
-        id: TRANSCRIPT_ACTION_ID,
-        label: 'Transcript',
-        prompt: TRANSCRIPT_ACTION_PROMPT.trim(),
-        mode: 'transcript'
+        id: TRANSCRIPT_TIMESTAMPS_ACTION_ID,
+        label: 'Transcript + Time',
+        prompt: TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT.trim(),
+        mode: 'transcript_timestamps'
+    };
+}
+
+function getTranscriptTextAction() {
+    return {
+        id: TRANSCRIPT_TEXT_ACTION_ID,
+        label: 'Transcript Text',
+        prompt: TRANSCRIPT_TEXT_ACTION_PROMPT.trim(),
+        mode: 'transcript_text'
     };
 }
 
@@ -148,7 +181,7 @@ function ensureCustomActions(actions = []) {
             let id = typeof action.id === 'string' ? action.id.trim() : '';
             const label = typeof action.label === 'string' ? action.label.trim() : '';
             let prompt = typeof action.prompt === 'string' ? action.prompt.trim() : '';
-            const mode = action.mode === 'transcript' ? 'transcript' : 'gemini';
+            const mode = normalizeActionMode(action.mode);
 
             if (!label) {
                 mutated = true;
@@ -171,8 +204,8 @@ function ensureCustomActions(actions = []) {
                 return;
             }
 
-            if (mode === 'transcript' && !prompt) {
-                prompt = TRANSCRIPT_ACTION_PROMPT.trim();
+            if (isTranscriptMode(mode) && !prompt) {
+                prompt = getTranscriptPromptForMode(mode);
                 mutated = true;
             }
 
@@ -182,7 +215,8 @@ function ensureCustomActions(actions = []) {
 
     if (!cleaned.length) {
         cleaned.push(getDefaultAction());
-        cleaned.push(getTranscriptAction());
+        cleaned.push(getTranscriptTimestampsAction());
+        cleaned.push(getTranscriptTextAction());
         return { actions: cleaned, mutated: true };
     }
 
@@ -191,8 +225,13 @@ function ensureCustomActions(actions = []) {
         mutated = true;
     }
 
-    if (!cleaned.some(action => action.id === TRANSCRIPT_ACTION_ID)) {
-        cleaned.splice(1, 0, getTranscriptAction());
+    if (!cleaned.some(action => action.id === TRANSCRIPT_TIMESTAMPS_ACTION_ID)) {
+        cleaned.splice(1, 0, getTranscriptTimestampsAction());
+        mutated = true;
+    }
+
+    if (!cleaned.some(action => action.id === TRANSCRIPT_TEXT_ACTION_ID)) {
+        cleaned.splice(2, 0, getTranscriptTextAction());
         mutated = true;
     }
 
@@ -288,6 +327,143 @@ function handleActionButtonClick(action) {
     });
 }
 
+function parseTimestampToSeconds(timestamp) {
+    const parts = String(timestamp || '').split(':').map(part => Number(part));
+    if (parts.some(part => !Number.isFinite(part) || part < 0)) {
+        return null;
+    }
+
+    if (parts.length === 2) {
+        const [minutes, seconds] = parts;
+        if (seconds >= 60) return null;
+        return (minutes * 60) + seconds;
+    }
+
+    if (parts.length === 3) {
+        const [hours, minutes, seconds] = parts;
+        if (minutes >= 60 || seconds >= 60) return null;
+        return (hours * 3600) + (minutes * 60) + seconds;
+    }
+
+    return null;
+}
+
+function buildYouTubeTimestampUrl(videoUrl, seconds) {
+    const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    try {
+        const parsedUrl = new URL(videoUrl);
+        parsedUrl.searchParams.set('t', `${safeSeconds}s`);
+        return parsedUrl.toString();
+    } catch (error) {
+        const safeVideoUrl = typeof videoUrl === 'string' ? videoUrl : window.location.href;
+        const separator = safeVideoUrl.includes('?') ? '&' : '?';
+        return `${safeVideoUrl}${separator}t=${safeSeconds}s`;
+    }
+}
+
+function linkifyTimestampsInContainer(container, videoUrl = window.location.href) {
+    if (!container) return;
+
+    const timestampRegex = /\[(\d{1,3}:\d{2}(?::\d{2})?)\]|(\b\d{1,3}:\d{2}(?::\d{2})\b)/g;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            if (!node?.nodeValue || !/\d{1,3}:\d{2}/.test(node.nodeValue)) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            const parent = node.parentElement;
+            if (!parent || parent.closest('a, code, pre, textarea, script, style')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+
+    const textNodes = [];
+    while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+    }
+
+    textNodes.forEach((textNode) => {
+        const originalText = textNode.nodeValue;
+        timestampRegex.lastIndex = 0;
+
+        let match;
+        let lastIndex = 0;
+        let replacedAny = false;
+        const fragment = document.createDocumentFragment();
+
+        while ((match = timestampRegex.exec(originalText)) !== null) {
+            const matchedText = match[0];
+            const rawTimestamp = match[1] || match[2];
+            const seconds = parseTimestampToSeconds(rawTimestamp);
+
+            if (seconds === null) {
+                continue;
+            }
+
+            replacedAny = true;
+            if (match.index > lastIndex) {
+                fragment.appendChild(document.createTextNode(originalText.slice(lastIndex, match.index)));
+            }
+
+            const link = document.createElement('a');
+            link.className = TIMESTAMP_LINK_CLASS;
+            link.href = buildYouTubeTimestampUrl(videoUrl, seconds);
+            link.dataset.timestampSeconds = String(seconds);
+            link.textContent = matchedText;
+            link.title = `Jump to ${rawTimestamp}`;
+            link.setAttribute('aria-label', `Jump to ${rawTimestamp}`);
+            fragment.appendChild(link);
+
+            lastIndex = match.index + matchedText.length;
+        }
+
+        if (!replacedAny) {
+            return;
+        }
+
+        if (lastIndex < originalText.length) {
+            fragment.appendChild(document.createTextNode(originalText.slice(lastIndex)));
+        }
+
+        textNode.parentNode.replaceChild(fragment, textNode);
+    });
+}
+
+function seekVideoToTimestamp(seconds) {
+    const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    const videoElement = document.querySelector('video.html5-main-video') || document.querySelector('video');
+    const timestampUrl = buildYouTubeTimestampUrl(window.location.href, safeSeconds);
+
+    if (videoElement) {
+        videoElement.currentTime = safeSeconds;
+        if (videoElement.paused) {
+            videoElement.play().catch(() => {});
+        }
+        try {
+            history.replaceState(history.state, '', timestampUrl);
+        } catch (error) {
+            // Ignore history update failures and keep playback seek.
+        }
+        return;
+    }
+
+    window.location.href = timestampUrl;
+}
+
+function handleTimestampLinkClick(event) {
+    const link = event.target.closest(`a.${TIMESTAMP_LINK_CLASS}`);
+    if (!link || !summaryDiv || !summaryDiv.contains(link)) return;
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const seconds = Number(link.dataset.timestampSeconds);
+    if (!Number.isFinite(seconds)) return;
+
+    event.preventDefault();
+    seekVideoToTimestamp(seconds);
+}
+
 function convertMarkdownToHtml(content) {
     if (typeof showdown !== 'undefined') {
         const converter = new showdown.Converter({
@@ -326,6 +502,7 @@ function renderActionResult(placeholderId, content, isError = false) {
     }
 
     placeholder.innerHTML = htmlContent;
+    linkifyTimestampsInContainer(placeholder, window.location.href);
     placeholder.removeAttribute('id');
     scrollMessagesToBottom();
 }
@@ -428,6 +605,7 @@ function injectSummaryDivContainer() {
 
             // Q&A Send Button
             summaryDiv.querySelector('#qa-send-btn-ext').addEventListener('click', handleQuestionSubmit);
+            summaryDiv.addEventListener('click', handleTimestampLinkClick);
 
         } else {
             console.warn("Secondary column not found for summary div injection.");
@@ -493,6 +671,10 @@ function appendMessage(htmlContent, role, id = null) {
     messageDiv.innerHTML = htmlContent; // Use innerHTML to allow basic formatting
     if (id) {
         messageDiv.id = id;
+    }
+
+    if (role === 'assistant') {
+        linkifyTimestampsInContainer(messageDiv, window.location.href);
     }
 
     // Check if content contains Arabic and set RTL if needed
