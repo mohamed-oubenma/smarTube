@@ -590,6 +590,15 @@ function buildPromptFromTemplate(template, { transcript, languageInstruction, vi
     return finalPrompt;
 }
 
+function buildTimestampFormattingInstruction() {
+    return [
+        'Timestamp citation rule:',
+        '- If the request is time-related, cite exact transcript timestamps for the relevant claims.',
+        '- Use bracketed timestamps only: [MM:SS] or [HH:MM:SS].',
+        '- Avoid vague temporal wording (for example: "near the beginning" or "later") without timestamp citations.'
+    ].join('\n');
+}
+
 async function callGeminiGenerateContent(promptText, geminiApiKey, geminiModel, generationConfig = {}) {
     console.log(`Calling Gemini API with model: ${geminiModel}`);
 
@@ -704,7 +713,9 @@ async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
         videoUrl
     });
 
-    const content = await callGeminiGenerateContent(finalPrompt, geminiApiKey, geminiModel);
+    const promptWithTimestampFormatting = `${buildTimestampFormattingInstruction()}\n\n${finalPrompt}`;
+
+    const content = await callGeminiGenerateContent(promptWithTimestampFormatting, geminiApiKey, geminiModel);
     return { content, actionLabel };
 }
 
