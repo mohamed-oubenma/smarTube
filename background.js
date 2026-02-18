@@ -1062,6 +1062,11 @@ async function callGeminiForQuestion(transcriptText, question, geminiApiKey, gem
     const prompt = `${promptPrefix}Based **only** on the following video transcript, answer the user's question. If the answer cannot be found in the transcript, say so.
 Do not use any external knowledge.
 
+Formatting rules:
+- For time-related questions (for example: when, what time, or at which point), include one or more exact transcript timestamps.
+- Format each timestamp strictly as [MM:SS] or [HH:MM:SS].
+- Prefer citing the nearest relevant transcript line(s).
+
 Transcript:
 ---
 ${trimmedTranscript}
