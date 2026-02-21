@@ -1,132 +1,228 @@
 :root {
-    /* Light theme variables */
-    --bg-color: #ffffff;
-    --text-color: #333333;
-    --border-color: #cccccc;
+    --bg-color: #f5f7fb;
+    --text-color: #1f2937;
+    --muted-text-color: #6b7280;
+    --border-color: #d9dde4;
     --input-bg: #ffffff;
-    --input-border: #cccccc;
-    --link-color: #007bff;
-    --button-bg: #007bff;
-    --button-hover: #0056b3;
+    --input-border: #cfd5df;
+    --link-color: #2563eb;
+    --button-bg: #0d6efd;
+    --button-hover: #0b5ed7;
     --fieldset-bg: #ffffff;
-    --status-success: #28a745;
-    --header-border: #eeeeee;
+    --status-success: #2fb344;
+    --header-border: #e5e7eb;
+    --focus-ring: rgba(37, 99, 235, 0.32);
+    --card-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    --radius-sm: 8px;
+    --radius-md: 12px;
 }
 
 [data-theme="dark"] {
-    --bg-color: #1f1f1f;
-    --text-color: #e0e0e0;
-    --border-color: #444444;
-    --input-bg: #2d2d2d;
-    --input-border: #444444;
+    --bg-color: #17191f;
+    --text-color: #e5e7eb;
+    --muted-text-color: #9ca3af;
+    --border-color: #3a414d;
+    --input-bg: #222732;
+    --input-border: #444c59;
     --link-color: #66b3ff;
     --button-bg: #0d6efd;
     --button-hover: #0b5ed7;
-    --fieldset-bg: #2d2d2d;
+    --fieldset-bg: #20242d;
     --status-success: #2fb344;
-    --header-border: #333333;
+    --header-border: #343b46;
+    --focus-ring: rgba(147, 197, 253, 0.28);
+    --card-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
-    font-family: sans-serif;
-    padding: 20px;
-    min-width: 400px;
+    margin: 0;
+    font-family: Inter, "Segoe UI", Roboto, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
     transition: background-color 0.3s, color 0.3s;
 }
 
-h1 {
-    color: var(--text-color);
-    margin-bottom: 20px;
+.options-page {
+    width: min(960px, 100% - 32px);
+    margin: 24px auto 32px;
+}
+
+.page-header {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
     border-bottom: 1px solid var(--header-border);
-    padding-bottom: 10px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.7rem;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+    margin: 8px 0 0;
+    color: var(--muted-text-color);
+    font-size: 0.95rem;
 }
 
 .option-item {
-    margin-bottom: 15px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
 }
 
-.option-item label {
+.option-card {
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--fieldset-bg);
+    box-shadow: var(--card-shadow);
+}
+
+.option-item > label {
     display: inline-block;
-    width: 130px;
-    margin-right: 10px;
-    font-weight: bold;
+    min-width: 170px;
+    font-weight: 600;
     color: var(--text-color);
 }
 
 fieldset {
+    width: 100%;
     border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 10px;
-    margin-bottom: 15px;
+    border-radius: var(--radius-sm);
+    padding: 14px;
     background-color: var(--fieldset-bg);
 }
 
 legend {
-    font-weight: bold;
-    padding: 0 5px;
+    font-weight: 700;
     color: var(--text-color);
+    padding: 0 6px;
+}
+
+fieldset label {
+    display: block;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+fieldset label:last-child {
+    margin-bottom: 0;
+}
+
+input[type="radio"] {
+    margin-right: 6px;
+}
+
+input[type="radio"],
+input[type="checkbox"] {
+    accent-color: var(--button-bg);
 }
 
 .option-item input[type="text"],
 .option-item input[type="password"],
 .option-item select,
 .option-item textarea {
-    padding: 8px;
+    min-height: 42px;
+    padding: 10px 12px;
     border: 1px solid var(--input-border);
-    border-radius: 4px;
-    flex-grow: 1;
-    min-width: 200px;
+    border-radius: var(--radius-sm);
+    flex: 1;
+    min-width: 220px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    font: inherit;
+}
+
+.option-item textarea {
+    min-height: 100px;
+}
+
+.option-item input[type="text"]:focus-visible,
+.option-item input[type="password"]:focus-visible,
+.option-item select:focus-visible,
+.option-item textarea:focus-visible,
+button:focus-visible,
+.help-link:focus-visible {
+    outline: 2px solid transparent;
+    border-color: var(--link-color);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.option-item select option {
     background-color: var(--input-bg);
     color: var(--text-color);
 }
 
-.option-item input[type="text"]:focus,
-.option-item input[type="password"]:focus,
-.option-item select:focus,
-.option-item textarea:focus {
-    outline: none;
-    border-color: var(--link-color);
-}
-
 .help-link {
-    margin-left: 10px;
-    font-size: 0.9em;
     color: var(--link-color);
     text-decoration: none;
+    font-size: 0.9rem;
 }
 
 .help-link:hover {
     text-decoration: underline;
 }
 
+.help-link-block {
+    display: block;
+    margin-top: 4px;
+}
+
 button {
-    padding: 10px 15px;
+    min-height: 42px;
+    padding: 10px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
     background-color: var(--button-bg);
-    color: white;
-    border: none;
-    border-radius: 4px;
+    color: #ffffff;
     cursor: pointer;
-    font-size: 1em;
-    margin-top: 10px;
-    transition: background-color 0.2s;
+    font: 600 0.95rem/1 Inter, "Segoe UI", Roboto, sans-serif;
+    transition: background-color 0.2s, box-shadow 0.2s;
 }
 
 button:hover {
     background-color: var(--button-hover);
 }
 
+.button-inline {
+    margin-left: 2px;
+  }
 #statusMessage {
-    margin-left: 15px;
-    font-weight: bold;
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    max-width: min(90vw, 640px);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    background-color: var(--card-bg);
+    border: 1px solid currentColor;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
 }
 
-#statusMessage.success {
-    color: var(--status-success);
+.option-item-inline-end {
+    align-items: flex-end;
+}
+
+.stack-top-md {
+    margin-top: 15px;
+  }
+#statusMessage.visible {
+    opacity: 1;
 }
 
 /* Radio buttons and checkboxes */
@@ -135,13 +231,16 @@ input[type="checkbox"] {
     accent-color: var(--button-bg);
 }
 
-/* Dark mode for select dropdown */
-.option-item select option {
-    background-color: var(--input-bg);
-    color: var(--text-color);
+#statusMessage {
+    display: inline-block;
+    margin-top: 2px;
+    font-weight: 700;
 }
 
-/* Font size controls */
+#statusMessage.success {
+    color: var(--status-success);
+}
+
 .font-size-controls {
     display: flex;
     align-items: center;
@@ -150,36 +249,27 @@ input[type="checkbox"] {
 }
 
 .font-size-controls button {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    min-height: 32px;
+    height: 32px;
     padding: 0;
     margin: 0;
     font-size: 20px;
-    font-weight: bold;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--button-bg);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-}
-
-.font-size-controls button:hover {
-    background-color: var(--button-hover);
 }
 
 #current-font-size {
-    font-weight: bold;
-    color: var(--text-color);
-    min-width: 50px;
+    min-width: 56px;
     text-align: center;
+    font-weight: 700;
 }
 
 .font-size-preview {
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 15px;
     margin-top: 10px;
     background-color: var(--input-bg);
@@ -197,22 +287,22 @@ input[type="checkbox"] {
 }
 
 .option-item.full-width {
-    flex-direction: column;
     align-items: stretch;
 }
 
 .option-help-text {
     margin: 0 0 12px;
-    color: var(--text-color);
-    font-size: 0.95em;
+    color: var(--muted-text-color);
+    font-size: 0.93rem;
+    line-height: 1.55;
 }
 
 .option-help-text code {
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 1px 4px;
-    font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.9em;
 }
 
@@ -230,12 +320,11 @@ input[type="checkbox"] {
 }
 
 .custom-action-form label {
-    font-weight: bold;
+    font-weight: 700;
 }
 
 .custom-action-form textarea {
     resize: vertical;
-    min-height: 90px;
 }
 
 .form-buttons {
@@ -244,14 +333,10 @@ input[type="checkbox"] {
     flex-wrap: wrap;
 }
 
-.form-buttons button {
-    margin-top: 0;
-}
-
 .secondary-button {
     background-color: transparent;
     color: var(--text-color);
-    border: 1px solid var(--border-color);
+    border-color: var(--border-color);
 }
 
 .secondary-button:hover {
@@ -294,7 +379,7 @@ input[type="checkbox"] {
 }
 
 .custom-action-item-title {
-    font-weight: bold;
+    font-weight: 700;
     color: var(--text-color);
 }
 
@@ -345,7 +430,48 @@ input[type="checkbox"] {
 }
 
 .mini-button {
+    min-height: 34px;
     padding: 6px 10px;
-    font-size: 0.9em;
-    margin-top: 0;
+    font-size: 0.88rem;
+}
+
+@media (max-width: 760px) {
+    .options-page {
+        width: min(100% - 20px, 100%);
+        margin: 16px auto 24px;
+    }
+
+    .option-card {
+        padding: 12px;
+    }
+
+    .option-item > label {
+        min-width: 100%;
+        margin-bottom: 2px;
+    }
+
+    .option-item {
+        gap: 8px;
+    }
+
+    .option-item input[type="text"],
+    .option-item input[type="password"],
+    .option-item select,
+    .option-item textarea,
+    .option-item button {
+        width: 100%;
+    }
+
+    .option-item-inline-end {
+        align-items: stretch;
+    }
+
+    .button-inline {
+        margin-left: 0;
+    }
+
+    .custom-action-item-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
