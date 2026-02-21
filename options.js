@@ -148,12 +148,14 @@ function showStatus(message, color = 'green', timeout = 1500) {
 
     status.textContent = message;
     status.style.color = color;
+    status.classList.toggle('visible', Boolean(message));
 
     if (message && timeout > 0) {
         const currentMessage = message;
         setTimeout(() => {
             if (status.textContent === currentMessage) {
                 status.textContent = '';
+                status.classList.remove('visible');
             }
         }, timeout);
     }
