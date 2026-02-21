@@ -264,6 +264,26 @@ function escapeHtml(text) {
     return tempDiv.innerHTML;
 }
 
+function sendRuntimeMessageSafe(message, onResponse, onError) {
+    if (!chrome?.runtime?.id) {
+        onError?.('Extension context invalidated. Please refresh this YouTube tab.');
+        return;
+    }
+
+    try {
+        chrome.runtime.sendMessage(message, (response) => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                onError?.(lastError.message);
+                return;
+            }
+            onResponse?.(response);
+        });
+    } catch (error) {
+        onError?.(error?.message || 'Unexpected runtime messaging error.');
+    }
+}
+
 function renderActionButtons(actions = []) {
     if (!summaryDiv) return;
     const buttonsContainer = summaryDiv.querySelector('#action-buttons-ext');
@@ -300,18 +320,12 @@ function handleActionButtonClick(action) {
     const placeholderId = createPlaceholderId('action-placeholder');
     appendMessage(`<i>${escapeHtml(action.label)} in progress...</i>`, 'assistant', placeholderId);
 
-    chrome.runtime.sendMessage({
+    sendRuntimeMessageSafe({
         action: 'runCustomPrompt',
         actionId: action.id,
         url: videoUrl,
         label: action.label
     }, (response) => {
-        if (chrome.runtime.lastError) {
-            console.error("Error sending runCustomPrompt message:", chrome.runtime.lastError.message);
-            renderActionResult(placeholderId, "Error communicating with background script: " + chrome.runtime.lastError.message, true);
-            return;
-        }
-
         if (!response) {
             renderActionResult(placeholderId, "Received no response from the background script. Check background logs.", true);
             return;
@@ -327,6 +341,9 @@ function handleActionButtonClick(action) {
         } else {
             renderActionResult(placeholderId, "Received empty response.", true);
         }
+    }, (errorMessage) => {
+        console.error('Error sending runCustomPrompt message:', errorMessage);
+        renderActionResult(placeholderId, 'Error communicating with background script: ' + errorMessage, true);
     });
 }
 
@@ -578,7 +595,9 @@ function injectSummaryDivContainer() {
             summaryDiv.querySelector('#settings-summary-btn').addEventListener('click', (event) => {
                 event.stopPropagation(); // Prevent header click listener from firing
                 console.log("Settings button clicked - sending message to open options page.");
-                chrome.runtime.sendMessage({ action: "openOptionsPage" });
+                sendRuntimeMessageSafe({ action: 'openOptionsPage' }, null, (errorMessage) => {
+                    console.error('Error opening options page:', errorMessage);
+                });
             });
 
             // Expand/minimize button
@@ -738,16 +757,14 @@ function handleQuestionSubmit() {
 
         // Send to background
         const videoUrl = window.location.href;
-        chrome.runtime.sendMessage({ action: "askQuestion", question: questionText, url: videoUrl }, (response) => {
-             if (chrome.runtime.lastError) {
-                console.error("Error sending question message:", chrome.runtime.lastError.message);
-                displayAnswer("Error communicating with background script: " + chrome.runtime.lastError.message, true);
-                return;
-            }
+        sendRuntimeMessageSafe({ action: 'askQuestion', question: questionText, url: videoUrl }, (response) => {
             // Response handling is done via the 'answerResponse' listener now
             if (response && response.status) {
                  console.log("Background acknowledged question:", response.status);
             }
+        }, (errorMessage) => {
+            console.error('Error sending question message:', errorMessage);
+            displayAnswer('Error communicating with background script: ' + errorMessage, true);
         });
     }
 }
