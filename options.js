@@ -374,8 +374,21 @@ function handleDeleteCustomAction(actionId) {
     resetCustomActionForm();
 }
 
+let generalSaveDebounceTimer = null;
+
+function queueSaveOptions(delay = 250) {
+    if (generalSaveDebounceTimer) {
+        clearTimeout(generalSaveDebounceTimer);
+    }
+    generalSaveDebounceTimer = setTimeout(() => {
+        generalSaveDebounceTimer = null;
+        saveOptions();
+    }, delay);
+}
+
 // Function to save general options to chrome.storage
 function saveOptions() {
+
     const geminiKey = document.getElementById('geminiApiKey').value;
     const geminiModel = document.getElementById('geminiModel').value;
     // Supadata keys are saved separately by their specific handlers
@@ -607,7 +620,11 @@ function updateFontSize(size) {
 function changeFontSize(increment) {
     const currentSize = parseInt(document.getElementById('current-font-size').textContent);
     const newSize = Math.max(10, Math.min(24, currentSize + increment));
+    if (newSize === currentSize) {
+        return;
+    }
     updateFontSize(newSize);
+    queueSaveOptions();
 }
 
 // Watch for system theme changes when in auto mode
@@ -636,8 +653,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Save button for general settings
-    document.getElementById('saveButton').addEventListener('click', saveOptions);
+
+    // Autosave general settings when values change
+    document.getElementById('geminiApiKey').addEventListener('input', () => queueSaveOptions());
+    document.getElementById('geminiModel').addEventListener('change', () => queueSaveOptions());
+    document.getElementById('summaryLanguage').addEventListener('change', () => queueSaveOptions());
+    document.getElementById('initialCollapsed').addEventListener('change', () => queueSaveOptions());
+
+    document.querySelectorAll('input[name="theme"]').forEach(radio => {
+        radio.addEventListener('change', () => queueSaveOptions());
+    });
 
     // Add Supadata Key button listener
     document.getElementById('addSupadataKeyBtn').addEventListener('click', handleAddSupadataKey);
