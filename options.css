@@ -121,12 +121,29 @@ button:hover {
 }
 
 #statusMessage {
-    margin-left: 15px;
-    font-weight: bold;
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    max-width: min(90vw, 640px);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    background-color: var(--card-bg);
+    border: 1px solid currentColor;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
 }
 
 #statusMessage.success {
     color: var(--status-success);
+}
+
+#statusMessage.visible {
+    opacity: 1;
 }
 
 /* Radio buttons and checkboxes */
