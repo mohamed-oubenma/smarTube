@@ -75,29 +75,51 @@
 #summary-header-buttons {
     display: flex; /* Align buttons horizontally */
     align-items: center;
+    gap: 6px;
     margin-left: 10px; /* Space from title */
 }
 
 #summary-header-buttons button {
-    background: none;
-    border: none;
-    font-size: 18px; /* Adjust size as needed */
-    font-weight: bold;
+    --icon-button-bg: transparent;
+    --icon-button-hover-bg: rgba(0, 0, 0, 0.08);
+    --icon-button-active-bg: rgba(0, 0, 0, 0.16);
+    --icon-button-focus-ring: #3ea6ff;
+
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--icon-button-bg);
+    border: 1px solid transparent;
+    border-radius: 999px;
     color: #666;
     cursor: pointer;
-    padding: 0 4px; /* Adjust padding */
-    line-height: 1;
-    transition: color 0.2s;
-    margin-left: 4px; /* Space between buttons */
+    padding: 0;
+    line-height: 0;
+    transition: background-color 0.2s, color 0.2s, transform 0.05s;
 }
 
 #summary-header-buttons button:hover {
+    background: var(--icon-button-hover-bg);
     color: #000;
 }
 
-/* Specific style for settings button if needed */
-#settings-summary-btn {
-     /* Emoji size is usually fine, adjust font-size if needed */
+#summary-header-buttons button:active {
+    background: var(--icon-button-active-bg);
+    transform: translateY(1px);
+}
+
+#summary-header-buttons button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--icon-button-focus-ring);
+}
+
+#summary-header-buttons button svg {
+    width: 18px;
+    height: 18px;
 }
 
 /* Font size control buttons */
@@ -347,6 +369,9 @@
 }
 
 #youtube-summary-container-ext.dark-theme #summary-header-buttons button {
+    --icon-button-hover-bg: rgba(255, 255, 255, 0.12);
+    --icon-button-active-bg: rgba(255, 255, 255, 0.18);
+    --icon-button-focus-ring: #8ab4f8;
     color: #aaa; /* Lighter buttons */
 }
 

@@ -22,6 +22,9 @@ Transcript:
 const TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
 const TRANSCRIPT_TEXT_ACTION_PROMPT = `Raw transcript text only from Supadata (no Gemini processing).`;
 const TIMESTAMP_LINK_CLASS = 'timestamp-link-ext';
+const EXPAND_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5h2V5h3V3zm13 0h-5v2h3v3h2V3zM5 16H3v5h5v-2H5v-3zm16 0h-2v3h-3v2h5v-5z" fill="currentColor"/></svg>';
+const MINIMIZE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 3h5v5h-2V5h-3V3zM3 3h5v2H5v3H3V3zm16 18h-5v-2h3v-3h2v5zM3 16h2v3h3v2H3v-5z" fill="currentColor"/></svg>';
+const SETTINGS_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.51.4 1.05.71 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" fill="currentColor"/></svg>';
 
 const OVERLAY_BACKDROP_ID = 'youtube-summary-overlay-backdrop-ext';
 
@@ -52,13 +55,13 @@ function updateToggleSizeButton() {
     if (!button) return;
 
     if (isExpandedView) {
-        button.textContent = '−';
         button.title = 'Reduce view';
         button.setAttribute('aria-label', 'Reduce view');
+        button.innerHTML = MINIMIZE_ICON_SVG;
     } else {
-        button.textContent = '⤢';
         button.title = 'Expand view';
         button.setAttribute('aria-label', 'Expand view');
+        button.innerHTML = EXPAND_ICON_SVG;
     }
 }
 
@@ -527,8 +530,8 @@ function injectSummaryDivContainer() {
                 <div id="summary-header-ext">
                     <span>SmarTube</span>
                     <div id="summary-header-buttons">
-                        <button id="toggle-size-summary-btn" title="Expand view" aria-label="Expand view">⤢</button>
-                        <button id="settings-summary-btn" title="Settings">⚙️</button>
+                        <button id="toggle-size-summary-btn" type="button" title="Expand view" aria-label="Expand view">${EXPAND_ICON_SVG}</button>
+                        <button id="settings-summary-btn" type="button" title="Open settings" aria-label="Open settings">${SETTINGS_ICON_SVG}</button>
                     </div>
                 </div>
                 <div id="summary-body-ext">
