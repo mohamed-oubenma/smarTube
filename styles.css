@@ -1,19 +1,41 @@
 /* --- Base Styles (Light Theme) --- */
 
 #youtube-summary-container-ext {
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
+    --panel-surface: #fbfbfc;
+    --panel-surface-muted: #f3f4f6;
+    --panel-surface-elevated: #ffffff;
+    --text-primary: #1f2937;
+    --text-secondary: #4b5563;
+    --text-tertiary: #6b7280;
+    --border-soft: rgba(17, 24, 39, 0.12);
+    --border-strong: rgba(17, 24, 39, 0.2);
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-soft: rgba(37, 99, 235, 0.16);
+    --success: #16a34a;
+    --error: #dc2626;
+    --shadow-container: 0 18px 48px rgba(15, 23, 42, 0.22);
+    --shadow-overlay: 0 28px 64px rgba(15, 23, 42, 0.36);
+    --radius-container: 16px;
+    --radius-chip: 999px;
+    --radius-bubble: 16px;
+    --radius-bubble-tail: 8px;
+
+    background-color: var(--panel-surface);
+    border: 1px solid var(--border-soft);
     /* padding removed, handled by header/body */
     margin-top: 15px;
     margin-bottom: 15px;
-    border-radius: 12px;
+    border-radius: var(--radius-container);
     /* max-height removed, handled by body */
     /* overflow-y removed, handled by body */
     font-size: var(--summary-font-size, 14px);
     line-height: 1.6;
-    color: #333; /* Default text color */
+    color: var(--text-primary);
     position: relative; /* Keep for potential absolute positioning needs if any arise */
     overflow: hidden; /* Contain sticky header */
+    box-shadow: var(--shadow-container);
+    transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
 
 /* --- Expanded Popup View --- */
@@ -34,9 +56,13 @@
     height: min(85vh, 900px);
     margin: 0;
     z-index: 2147483647;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-overlay);
     display: flex;
     flex-direction: column;
+}
+
+#youtube-summary-container-ext.collapsed {
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
 }
 
 #youtube-summary-container-ext.expanded-view #summary-body-ext {
@@ -58,18 +84,19 @@
     justify-content: space-between;
     align-items: center;
     padding: 8px 15px; /* Reduced padding */
-    background-color: #f1f1f1; /* Slightly different header bg */
-    border-bottom: 1px solid #ddd;
+    background-color: var(--panel-surface-muted);
+    border-bottom: 1px solid var(--border-soft);
     position: sticky;
     top: 0;
     z-index: 1;
     cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 #summary-header-ext span {
     font-weight: 500; /* Match YouTube's style */
     font-size: 16px;
-    color: #333;
+    color: var(--text-primary);
 }
 
 #summary-header-buttons {
@@ -83,16 +110,18 @@
     border: none;
     font-size: 18px; /* Adjust size as needed */
     font-weight: bold;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 0 4px; /* Adjust padding */
     line-height: 1;
-    transition: color 0.2s;
+    transition: color 0.2s ease, background-color 0.2s ease;
     margin-left: 4px; /* Space between buttons */
+    border-radius: 6px;
 }
 
 #summary-header-buttons button:hover {
-    color: #000;
+    color: var(--accent);
+    background-color: var(--accent-soft);
 }
 
 /* Specific style for settings button if needed */
@@ -112,12 +141,12 @@
     justify-content: center;
     border-radius: 4px !important;
     background-color: transparent !important;
-    transition: background-color 0.2s !important;
+    transition: background-color 0.2s ease !important;
 }
 
 #decrease-font-btn:hover,
 #increase-font-btn:hover {
-    background-color: rgba(0, 0, 0, 0.1) !important;
+    background-color: var(--accent-soft) !important;
 }
 
 #summary-body-ext {
@@ -127,7 +156,7 @@
 
     /* Scrollbar variables */
     --scrollbar-thumb-color: #c1c1c1;
-    --scrollbar-track-color: #f1f1f1;
+    --scrollbar-track-color: var(--panel-surface-muted);
 
     /* Scrollbar styling */
     scrollbar-width: thin; /* Firefox */
@@ -147,7 +176,7 @@
     border-radius: 10px;
 }
 #summary-body-ext::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8; /* Slightly darker */
+    background: color-mix(in srgb, var(--scrollbar-thumb-color) 85%, #000 15%);
 }
 
 #action-buttons-ext {
@@ -160,18 +189,26 @@
 .action-button {
     padding: 8px 14px;
     cursor: pointer;
-    background-color: #f1f1f1;
-    border: 1px solid #ccc;
-    border-radius: 18px;
+    background-color: var(--panel-surface-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-chip);
     font-size: 13px;
     font-weight: 500;
     line-height: 18px;
-    color: #333;
-    transition: background-color 0.2s, border-color 0.2s, transform 0.1s;
+    color: var(--text-secondary);
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .action-button:hover {
-    background-color: #e0e0e0;
+    background-color: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
+}
+
+.action-button:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .action-button:active {
@@ -180,7 +217,7 @@
 
 .action-buttons-empty {
     font-size: 0.95em;
-    color: #666;
+    color: var(--text-tertiary);
 }
 
 #messages-container-ext {
@@ -194,7 +231,7 @@
     display: block;
     margin-bottom: 10px;
     font-size: 16px;
-    color: #333;
+    color: var(--text-primary);
 }
 
 #summary-content-ext p {
@@ -218,51 +255,61 @@
     display: flex;
     align-items: center; /* Align items vertically */
     padding: 8px 10px;
-    border-top: 1px solid #ddd;
-    background-color: #f1f1f1; /* Match header */
+    border-top: 1px solid var(--border-soft);
+    background-color: var(--panel-surface-muted);
     position: sticky;
     bottom: 0;
     z-index: 1; /* Ensure it's above body content */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 #qa-input-ext {
     flex-grow: 1; /* Take available space */
     padding: 6px 10px;
-    border: 1px solid #ccc;
-    border-radius: 15px; /* Rounded corners */
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-chip);
     margin-right: 8px;
     font-size: 13px;
     line-height: 1.4; /* Adjust for textarea */
     resize: none; /* Disable manual resize */
     overflow-y: auto; /* Allow scrolling if needed */
     max-height: 80px; /* Limit expansion */
-    background-color: #fff;
-    color: #333;
+    background-color: var(--panel-surface-elevated);
+    color: var(--text-primary);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+#qa-input-ext:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 #qa-send-btn-ext {
     background: none;
     border: none;
     font-size: 18px; /* Adjust icon size */
-    color: #555;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 5px;
     line-height: 1;
-    transition: color 0.2s;
+    transition: color 0.2s ease;
 }
 
 #qa-send-btn-ext:hover {
-    color: #000;
+    color: var(--accent);
 }
 
 /* --- Chat Message Styles --- */
 
 .message {
     padding: 8px 12px;
-    border-radius: 18px; /* Bubble shape */
+    border-radius: var(--radius-bubble);
+    border: 1px solid transparent;
     max-width: 85%; /* Prevent full width */
     word-wrap: break-word; /* Break long words */
     align-self: flex-start; /* Assistant/default on left */
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 /* Keep lists inside the chat bubble */
@@ -278,34 +325,36 @@
 }
 
 .message a.timestamp-link-ext {
-    color: #065fd4;
+    color: var(--accent);
     text-decoration: underline;
     text-underline-offset: 2px;
     font-weight: 600;
 }
 
 .message a.timestamp-link-ext:hover {
-    color: #0b57d0;
+    color: var(--accent-hover);
 }
 
 .user-message {
-    background-color: #e1e1e1; /* Light grey for user */
-    color: #333;
+    background-color: color-mix(in srgb, var(--accent) 14%, var(--panel-surface-elevated));
+    border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+    color: var(--text-primary);
     align-self: flex-end; /* Align to right */
-    border-bottom-right-radius: 5px; /* Slightly different corner */
+    border-bottom-right-radius: var(--radius-bubble-tail);
 }
 
 .assistant-message {
-    background-color: #f1f1f1; /* Slightly lighter grey for assistant */
-    color: #333;
+    background-color: var(--panel-surface-muted);
+    border-color: var(--border-soft);
+    color: var(--text-primary);
     align-self: flex-start; /* Align to left */
-    border-bottom-left-radius: 5px; /* Slightly different corner */
+    border-bottom-left-radius: var(--radius-bubble-tail);
 }
 
 /* Style for the 'Thinking...' placeholder */
 .assistant-message#thinking-placeholder i,
 .assistant-message#summary-placeholder i {
-     color: #666;
+     color: var(--text-tertiary);
 }
 
 /* --- RTL Support for Arabic Content --- */
@@ -332,107 +381,59 @@
 /* --- Dark Theme Overrides --- */
 
 #youtube-summary-container-ext.dark-theme {
-    background-color: #282828; /* Dark background */
-    border-color: #444;       /* Darker border */
-    color: #eee;             /* Light text */
-}
+    --panel-surface: #1f232d;
+    --panel-surface-muted: #262d39;
+    --panel-surface-elevated: #2b3442;
+    --text-primary: #f3f4f6;
+    --text-secondary: #d1d5db;
+    --text-tertiary: #9ca3af;
+    --border-soft: rgba(226, 232, 240, 0.2);
+    --border-strong: rgba(226, 232, 240, 0.3);
+    --accent: #8ab4f8;
+    --accent-hover: #aecbfa;
+    --accent-soft: rgba(138, 180, 248, 0.18);
+    --success: #4ade80;
+    --error: #fb7185;
+    --shadow-container: 0 18px 56px rgba(2, 6, 23, 0.55);
+    --shadow-overlay: 0 30px 76px rgba(2, 6, 23, 0.72);
 
-#youtube-summary-container-ext.dark-theme #summary-header-ext {
-    background-color: #333; /* Darker header bg */
-    border-bottom-color: #444;
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-ext span {
-    color: #eee; /* Light title text */
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-buttons button {
-    color: #aaa; /* Lighter buttons */
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-buttons button:hover {
-    color: #fff; /* White on hover */
+    color: var(--text-primary);
 }
 
 #youtube-summary-container-ext.dark-theme #summary-body-ext {
-    --scrollbar-thumb-color: #555; /* Darker scrollbar thumb */
-    --scrollbar-track-color: #333; /* Darker scrollbar track */
+    --scrollbar-thumb-color: #556174;
+    --scrollbar-track-color: #222a35;
 }
 
 #youtube-summary-container-ext.dark-theme #summary-body-ext::-webkit-scrollbar-thumb:hover {
-    background: #777; /* Lighter hover for dark scrollbar */
-}
-
-#youtube-summary-container-ext.dark-theme .action-button {
-    background-color: #3a3a3a;
-    border-color: #555;
-    color: #eee;
-}
-
-#youtube-summary-container-ext.dark-theme .action-button:hover {
-    background-color: #4a4a4a;
+    background: #6b7b93;
 }
 
 #youtube-summary-container-ext.dark-theme .action-buttons-empty {
-    color: #bbb;
+    color: var(--text-tertiary);
 }
 
 /* Dark theme content styling */
 #youtube-summary-container-ext.dark-theme #summary-content-ext strong {
-    color: #eee;
+    color: var(--text-primary);
 }
 
 /* Ensure base text color is also overridden */
 #youtube-summary-container-ext.dark-theme #summary-body-ext {
-    color: #eee;
-}
-
-/* Dark theme for Q&A Footer */
-#youtube-summary-container-ext.dark-theme #summary-footer-ext {
-    background-color: #333; /* Match header */
-    border-top-color: #444;
+    color: var(--text-primary);
 }
 
 #youtube-summary-container-ext.dark-theme #qa-input-ext {
-    background-color: #282828; /* Darker input bg */
-    border-color: #555;
-    color: #eee; /* Light text */
-}
-
-#youtube-summary-container-ext.dark-theme #qa-send-btn-ext {
-    color: #aaa; /* Lighter icon */
-}
-
-#youtube-summary-container-ext.dark-theme #qa-send-btn-ext:hover {
-    color: #fff; /* White on hover */
-}
-
-/* Dark theme for Chat Messages */
-#youtube-summary-container-ext.dark-theme .user-message {
-    background-color: #4f4f4f; /* Darker grey for user */
-    color: #eee;
-}
-
-#youtube-summary-container-ext.dark-theme .assistant-message {
-    background-color: #404040; /* Slightly lighter dark grey for assistant */
-    color: #eee;
-}
-
-#youtube-summary-container-ext.dark-theme .message a.timestamp-link-ext {
-    color: #8ab4f8;
-}
-
-#youtube-summary-container-ext.dark-theme .message a.timestamp-link-ext:hover {
-    color: #aecbfa;
+    border-color: var(--border-strong);
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message#thinking-placeholder i,
 #youtube-summary-container-ext.dark-theme .assistant-message#summary-placeholder i {
-     color: #bbb; /* Lighter italic text */
+     color: var(--text-tertiary);
 }
 
 /* Dark theme overrides for font buttons */
 #youtube-summary-container-ext.dark-theme #decrease-font-btn:hover,
 #youtube-summary-container-ext.dark-theme #increase-font-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: var(--accent-soft) !important;
 }
