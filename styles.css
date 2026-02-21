@@ -23,17 +23,13 @@
 
     background-color: var(--panel-surface);
     border: 1px solid var(--border-soft);
-    /* padding removed, handled by header/body */
-    margin-top: 15px;
-    margin-bottom: 15px;
+    margin: 15px 0;
     border-radius: var(--radius-container);
-    /* max-height removed, handled by body */
-    /* overflow-y removed, handled by body */
     font-size: var(--summary-font-size, 14px);
     line-height: 1.6;
     color: var(--text-primary);
-    position: relative; /* Keep for potential absolute positioning needs if any arise */
-    overflow: hidden; /* Contain sticky header */
+    position: relative;
+    overflow: hidden;
     box-shadow: var(--shadow-container);
     transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
@@ -83,7 +79,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 15px; /* Reduced padding */
+    padding: 8px 15px;
     background-color: var(--panel-surface-muted);
     border-bottom: 1px solid var(--border-soft);
     position: sticky;
@@ -94,20 +90,19 @@
 }
 
 #summary-header-ext span {
-    font-weight: 500; /* Match YouTube's style */
+    font-weight: 500;
     font-size: 16px;
     color: var(--text-primary);
 }
 
 #summary-header-buttons {
-    display: flex; /* Align buttons horizontally */
+    display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: 10px; /* Space from title */
+    margin-left: 10px;
 }
 
 #summary-header-buttons button {
-    --icon-button-bg: transparent;
     --icon-button-hover-bg: rgba(0, 0, 0, 0.08);
     --icon-button-active-bg: rgba(0, 0, 0, 0.16);
     --icon-button-focus-ring: #3ea6ff;
@@ -119,30 +114,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--icon-button-bg);
+    background: transparent;
     border: 1px solid transparent;
     border-radius: 999px;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
     line-height: 0;
     transition: background-color 0.2s, color 0.2s, transform 0.05s;
-}
-
-#summary-header-buttons button:hover {
-    background: var(--icon-button-hover-bg);
-    color: #000;
-    background: none;
-    border: none;
-    font-size: 18px; /* Adjust size as needed */
-    font-weight: bold;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 0 4px; /* Adjust padding */
-    line-height: 1;
-    transition: color 0.2s ease, background-color 0.2s ease;
-    margin-left: 4px; /* Space between buttons */
-    border-radius: 6px;
 }
 
 #summary-header-buttons button:hover {
@@ -165,52 +144,33 @@
     height: 18px;
 }
 
-/* Font size control buttons */
-#decrease-font-btn,
-#increase-font-btn {
-    font-size: 20px !important;
-    font-weight: bold !important;
-    width: 24px;
-    height: 24px;
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px !important;
-    background-color: transparent !important;
-    transition: background-color 0.2s ease !important;
-}
-
-#decrease-font-btn:hover,
-#increase-font-btn:hover {
-    background-color: var(--accent-soft) !important;
-}
-
 #summary-body-ext {
     padding: 15px;
-    max-height: 350px; /* Example max height */
+    max-height: 350px;
     overflow-y: auto;
+    background: var(--panel-surface);
+    color: var(--text-primary);
 
-    /* Scrollbar variables */
     --scrollbar-thumb-color: #c1c1c1;
     --scrollbar-track-color: var(--panel-surface-muted);
-
-    /* Scrollbar styling */
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color); /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
 }
 
-/* Webkit Scrollbar for Body */
 #summary-body-ext::-webkit-scrollbar {
     width: 8px;
 }
+
 #summary-body-ext::-webkit-scrollbar-track {
     background: var(--scrollbar-track-color);
     border-radius: 10px;
 }
+
 #summary-body-ext::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb-color);
     border-radius: 10px;
 }
+
 #summary-body-ext::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, var(--scrollbar-thumb-color) 85%, #000 15%);
 }
@@ -260,23 +220,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-}
-
-/* Content styling within the body */
-#summary-content-ext strong { /* Title inside body */
-    display: block;
-    margin-bottom: 10px;
-    font-size: 16px;
     color: var(--text-primary);
-}
-
-#summary-content-ext p {
-    margin-bottom: 10px;
-}
-
-#summary-content-ext ul {
-    margin-left: 20px;
-    margin-bottom: 10px;
 }
 
 /* Collapsed state */
@@ -286,30 +230,29 @@
 }
 
 /* --- Q&A Footer Styles --- */
-
 #summary-footer-ext {
     display: flex;
-    align-items: center; /* Align items vertically */
+    align-items: center;
     padding: 8px 10px;
     border-top: 1px solid var(--border-soft);
     background-color: var(--panel-surface-muted);
     position: sticky;
     bottom: 0;
-    z-index: 1; /* Ensure it's above body content */
+    z-index: 1;
     transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 #qa-input-ext {
-    flex-grow: 1; /* Take available space */
+    flex-grow: 1;
     padding: 6px 10px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-chip);
     margin-right: 8px;
     font-size: 13px;
-    line-height: 1.4; /* Adjust for textarea */
-    resize: none; /* Disable manual resize */
-    overflow-y: auto; /* Allow scrolling if needed */
-    max-height: 80px; /* Limit expansion */
+    line-height: 1.4;
+    resize: none;
+    overflow-y: auto;
+    max-height: 80px;
     background-color: var(--panel-surface-elevated);
     color: var(--text-primary);
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
@@ -324,7 +267,7 @@
 #qa-send-btn-ext {
     background: none;
     border: none;
-    font-size: 18px; /* Adjust icon size */
+    font-size: 18px;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 5px;
@@ -337,23 +280,19 @@
 }
 
 /* --- Chat Message Styles --- */
-
 .message {
-    padding: 11px 14px;
-    border-radius: 16px; /* Bubble shape */
     padding: 8px 12px;
     border-radius: var(--radius-bubble);
     border: 1px solid transparent;
-    max-width: 85%; /* Prevent full width */
-    word-wrap: break-word; /* Break long words */
+    max-width: 85%;
+    word-wrap: break-word;
     overflow-wrap: anywhere;
     line-height: 1.65;
     letter-spacing: 0.01em;
-    align-self: flex-start; /* Assistant/default on left */
+    align-self: flex-start;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-/* Better markdown defaults inside chat bubbles */
 .message > :first-child {
     margin-top: 0;
 }
@@ -382,18 +321,10 @@
     font-weight: 700;
 }
 
-.message h1 {
-    font-size: 1.2em;
-}
-
-.message h2 {
-    font-size: 1.1em;
-}
-
+.message h1 { font-size: 1.2em; }
+.message h2 { font-size: 1.1em; }
 .message h3,
-.message h4 {
-    font-size: 1.02em;
-}
+.message h4 { font-size: 1.02em; }
 
 .message ul,
 .message ol {
@@ -437,19 +368,19 @@
 }
 
 .user-message {
-    background-color: #e8ecf2;
-    color: #1f2937;
-    align-self: flex-end; /* Align to right */
-    border-bottom-right-radius: 6px; /* Slightly different corner */
+    background-color: color-mix(in srgb, var(--accent) 14%, var(--panel-surface-elevated));
+    border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+    color: var(--text-primary);
+    align-self: flex-end;
+    border-bottom-right-radius: var(--radius-bubble-tail);
 }
 
 .assistant-message {
-    background-color: #ffffff;
-    color: #1f2937;
-    border: 1px solid #d9e2ef;
-    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
-    align-self: flex-start; /* Align to left */
-    border-bottom-left-radius: 6px; /* Slightly different corner */
+    background-color: var(--panel-surface-muted);
+    border-color: var(--border-soft);
+    color: var(--text-primary);
+    align-self: flex-start;
+    border-bottom-left-radius: var(--radius-bubble-tail);
 }
 
 .assistant-message#thinking-placeholder,
@@ -458,31 +389,6 @@
     border-style: dashed;
     border-color: #bfd0f5;
     color: #385487;
-.message a.timestamp-link-ext {
-    color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    font-weight: 600;
-}
-
-.message a.timestamp-link-ext:hover {
-    color: var(--accent-hover);
-}
-
-.user-message {
-    background-color: color-mix(in srgb, var(--accent) 14%, var(--panel-surface-elevated));
-    border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-    color: var(--text-primary);
-    align-self: flex-end; /* Align to right */
-    border-bottom-right-radius: var(--radius-bubble-tail);
-}
-
-.assistant-message {
-    background-color: var(--panel-surface-muted);
-    border-color: var(--border-soft);
-    color: var(--text-primary);
-    align-self: flex-start; /* Align to left */
-    border-bottom-left-radius: var(--radius-bubble-tail);
 }
 
 .assistant-message#thinking-placeholder i,
@@ -499,6 +405,17 @@
 
 .message a:hover {
     color: #0842a0;
+}
+
+.message a.timestamp-link-ext {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 600;
+}
+
+.message a.timestamp-link-ext:hover {
+    color: var(--accent-hover);
 }
 
 .timestamp-link-ext {
@@ -526,15 +443,10 @@
 .timestamp-link-ext:focus-visible {
     outline: 2px solid #2a66d9;
     outline-offset: 2px;
-     color: var(--text-tertiary);
 }
 
 /* --- RTL Support for Arabic Content --- */
-
-#summary-body-ext[dir="rtl"] {
-    text-align: right;
-}
-
+#summary-body-ext[dir="rtl"],
 .message[dir="rtl"] {
     text-align: right;
 }
@@ -562,31 +474,7 @@
 }
 
 /* --- Dark Theme Overrides --- */
-
 #youtube-summary-container-ext.dark-theme {
-    background-color: #282828; /* Dark background */
-    border-color: #444;       /* Darker border */
-    color: #eee;             /* Light text */
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-ext {
-    background-color: #333; /* Darker header bg */
-    border-bottom-color: #444;
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-ext span {
-    color: #eee; /* Light title text */
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-buttons button {
-    --icon-button-hover-bg: rgba(255, 255, 255, 0.12);
-    --icon-button-active-bg: rgba(255, 255, 255, 0.18);
-    --icon-button-focus-ring: #8ab4f8;
-    color: #aaa; /* Lighter buttons */
-}
-
-#youtube-summary-container-ext.dark-theme #summary-header-buttons button:hover {
-    color: #fff; /* White on hover */
     --panel-surface: #1f232d;
     --panel-surface-muted: #262d39;
     --panel-surface-elevated: #2b3442;
@@ -603,7 +491,15 @@
     --shadow-container: 0 18px 56px rgba(2, 6, 23, 0.55);
     --shadow-overlay: 0 30px 76px rgba(2, 6, 23, 0.72);
 
+    background-color: var(--panel-surface);
+    border-color: var(--border-soft);
     color: var(--text-primary);
+}
+
+#youtube-summary-container-ext.dark-theme #summary-header-buttons button {
+    --icon-button-hover-bg: rgba(255, 255, 255, 0.12);
+    --icon-button-active-bg: rgba(255, 255, 255, 0.18);
+    --icon-button-focus-ring: #8ab4f8;
 }
 
 #youtube-summary-container-ext.dark-theme #summary-body-ext {
@@ -615,38 +511,10 @@
     background: #6b7b93;
 }
 
-#youtube-summary-container-ext.dark-theme .action-buttons-empty {
-    color: var(--text-tertiary);
-}
-
-/* Dark theme content styling */
-#youtube-summary-container-ext.dark-theme #summary-content-ext strong {
-    color: var(--text-primary);
-}
-
-/* Ensure base text color is also overridden */
-#youtube-summary-container-ext.dark-theme #summary-body-ext {
-    color: var(--text-primary);
-}
-
 #youtube-summary-container-ext.dark-theme #qa-input-ext {
-    background-color: #282828; /* Darker input bg */
-    border-color: #555;
-    color: #eee; /* Light text */
-}
-
-#youtube-summary-container-ext.dark-theme #qa-send-btn-ext {
-    color: #aaa; /* Lighter icon */
-}
-
-#youtube-summary-container-ext.dark-theme #qa-send-btn-ext:hover {
-    color: #fff; /* White on hover */
-}
-
-/* Dark theme for Chat Messages */
-#youtube-summary-container-ext.dark-theme .user-message {
-    background-color: #4f4f4f; /* Darker grey for user */
-    color: #eee;
+    background-color: var(--panel-surface-elevated);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message {
@@ -698,22 +566,15 @@
     background: #233146;
     border-color: #4d6691;
     color: #ccdcf7;
-    border-color: var(--border-strong);
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message#thinking-placeholder i,
 #youtube-summary-container-ext.dark-theme .assistant-message#summary-placeholder i {
-     color: #d8e4fb;
+    color: #d8e4fb;
 }
 
 #youtube-summary-container-ext.dark-theme #summary-body-ext[dir="rtl"] .message blockquote,
 #youtube-summary-container-ext.dark-theme .message[dir="rtl"] blockquote {
     border-right-color: #45556d;
-     color: var(--text-tertiary);
-}
-
-/* Dark theme overrides for font buttons */
-#youtube-summary-container-ext.dark-theme #decrease-font-btn:hover,
-#youtube-summary-container-ext.dark-theme #increase-font-btn:hover {
-    background-color: var(--accent-soft) !important;
+    color: #c6cfdd;
 }
