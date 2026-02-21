@@ -32,9 +32,9 @@ A powerful Chrome extension that uses Google's Gemini AI to summarize YouTube vi
 ## How to Use
 
 1. Navigate to any YouTube video
-2. Look for the "Video Summary" container in the sidebar
-3. Click "✨ Show Summary" to generate a video summary
-4. Use the text input at the bottom to ask questions about the video
+2. Look for the **SmarTube** panel in the sidebar
+3. Use the built-in **Summarize** or **Transcript** action buttons to generate output
+4. Use the text input at the bottom to ask questions about the video transcript
 5. Click the header to collapse/expand the container
 6. Access settings anytime via the ⚙️ button
 
