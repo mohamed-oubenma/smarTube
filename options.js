@@ -11,6 +11,13 @@ Transcript:
 ---`;
 const TRANSCRIPT_TIMESTAMPS_ACTION_PROMPT = `Raw transcript from Supadata with timestamps (no Gemini processing).`;
 const TRANSCRIPT_TEXT_ACTION_PROMPT = `Raw transcript text only from Supadata (no Gemini processing).`;
+const READ_ALOUD_DEFAULTS = Object.freeze({
+    enabled: true,
+    language: 'auto',
+    rate: 1,
+    pitch: 1
+});
+const READ_ALOUD_ALLOWED_LANGUAGES = new Set(['auto', 'en', 'ar', 'fr', 'es']);
 
 let customActionsState = [];
 let currentCustomActionEditId = null;
@@ -158,6 +165,65 @@ function showStatus(message, color = 'green', timeout = 1500) {
                 status.classList.remove('visible');
             }
         }, timeout);
+    }
+}
+
+function normalizeReadAloudLanguage(language) {
+    return READ_ALOUD_ALLOWED_LANGUAGES.has(language) ? language : READ_ALOUD_DEFAULTS.language;
+}
+
+function normalizeReadAloudNumber(value, fallback, min, max) {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+    return Math.min(max, Math.max(min, parsed));
+}
+
+function getReadAloudSettingsFromForm() {
+    const enabledInput = document.getElementById('readAloudEnabled');
+    const languageInput = document.getElementById('readAloudLanguage');
+    const rateInput = document.getElementById('readAloudRate');
+    const pitchInput = document.getElementById('readAloudPitch');
+
+    const enabled = enabledInput ? enabledInput.checked : READ_ALOUD_DEFAULTS.enabled;
+    const language = normalizeReadAloudLanguage(languageInput ? languageInput.value : READ_ALOUD_DEFAULTS.language);
+    const rate = normalizeReadAloudNumber(rateInput ? rateInput.value : READ_ALOUD_DEFAULTS.rate, READ_ALOUD_DEFAULTS.rate, 0.7, 1.4);
+    const pitch = normalizeReadAloudNumber(pitchInput ? pitchInput.value : READ_ALOUD_DEFAULTS.pitch, READ_ALOUD_DEFAULTS.pitch, 0.8, 1.2);
+
+    return { enabled, language, rate, pitch };
+}
+
+function updateReadAloudValueLabels(rateValue = null, pitchValue = null) {
+    const rateInput = document.getElementById('readAloudRate');
+    const pitchInput = document.getElementById('readAloudPitch');
+    const rateLabel = document.getElementById('readAloudRateValue');
+    const pitchLabel = document.getElementById('readAloudPitchValue');
+
+    const rate = normalizeReadAloudNumber(
+        rateValue !== null ? rateValue : (rateInput ? rateInput.value : READ_ALOUD_DEFAULTS.rate),
+        READ_ALOUD_DEFAULTS.rate,
+        0.7,
+        1.4
+    );
+    const pitch = normalizeReadAloudNumber(
+        pitchValue !== null ? pitchValue : (pitchInput ? pitchInput.value : READ_ALOUD_DEFAULTS.pitch),
+        READ_ALOUD_DEFAULTS.pitch,
+        0.8,
+        1.2
+    );
+
+    if (rateInput) {
+        rateInput.value = rate.toFixed(1);
+    }
+    if (pitchInput) {
+        pitchInput.value = pitch.toFixed(1);
+    }
+    if (rateLabel) {
+        rateLabel.textContent = `${rate.toFixed(1)}x`;
+    }
+    if (pitchLabel) {
+        pitchLabel.textContent = pitch.toFixed(1);
     }
 }
 
@@ -398,6 +464,9 @@ function saveOptions() {
     const theme = document.querySelector('input[name="theme"]:checked').value;
     const initialCollapsed = document.getElementById('initialCollapsed').checked;
     const fontSize = parseInt(document.getElementById('current-font-size').textContent);
+    const readAloudSettings = getReadAloudSettingsFromForm();
+
+    updateReadAloudValueLabels(readAloudSettings.rate, readAloudSettings.pitch);
 
     chrome.storage.sync.set({
         geminiApiKey: geminiKey,
@@ -406,7 +475,11 @@ function saveOptions() {
         summaryLanguage: language,
         theme: theme,
         initialCollapsed: initialCollapsed,
-        fontSize: fontSize
+        fontSize: fontSize,
+        readAloudEnabled: readAloudSettings.enabled,
+        readAloudLanguage: readAloudSettings.language,
+        readAloudRate: readAloudSettings.rate,
+        readAloudPitch: readAloudSettings.pitch
     }, () => {
         // Update status to let user know options were saved.
         showStatus('General settings saved.');
@@ -572,7 +645,11 @@ function restoreOptions() {
         theme: 'auto',
         initialCollapsed: false,
         fontSize: 14,
-        customActionButtons: []
+        customActionButtons: [],
+        readAloudEnabled: READ_ALOUD_DEFAULTS.enabled,
+        readAloudLanguage: READ_ALOUD_DEFAULTS.language,
+        readAloudRate: READ_ALOUD_DEFAULTS.rate,
+        readAloudPitch: READ_ALOUD_DEFAULTS.pitch
     }, (items) => {
         document.getElementById('geminiApiKey').value = items.geminiApiKey;
         document.getElementById('geminiModel').value = items.geminiModel;
@@ -580,6 +657,9 @@ function restoreOptions() {
         renderSupadataKeysList(items.supadataApiKeys, items.activeSupadataKeyId); // Render the list of Supadata keys
         document.getElementById('summaryLanguage').value = items.summaryLanguage;
         document.getElementById('initialCollapsed').checked = items.initialCollapsed;
+        document.getElementById('readAloudEnabled').checked = Boolean(items.readAloudEnabled);
+        document.getElementById('readAloudLanguage').value = normalizeReadAloudLanguage(items.readAloudLanguage);
+        updateReadAloudValueLabels(items.readAloudRate, items.readAloudPitch);
         
         // Set theme radio button
         const themeRadio = document.getElementById(`theme${items.theme.charAt(0).toUpperCase() + items.theme.slice(1)}`);
@@ -661,6 +741,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('geminiModel').addEventListener('change', () => queueSaveOptions());
     document.getElementById('summaryLanguage').addEventListener('change', () => queueSaveOptions());
     document.getElementById('initialCollapsed').addEventListener('change', () => queueSaveOptions());
+    document.getElementById('readAloudEnabled').addEventListener('change', () => queueSaveOptions());
+    document.getElementById('readAloudLanguage').addEventListener('change', () => queueSaveOptions());
+
+    document.getElementById('readAloudRate').addEventListener('input', (event) => {
+        updateReadAloudValueLabels(event.target.value, null);
+        queueSaveOptions();
+    });
+    document.getElementById('readAloudPitch').addEventListener('input', (event) => {
+        updateReadAloudValueLabels(null, event.target.value);
+        queueSaveOptions();
+    });
 
     document.querySelectorAll('input[name="theme"]').forEach(radio => {
         radio.addEventListener('change', () => queueSaveOptions());

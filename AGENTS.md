@@ -36,8 +36,9 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 - The container includes:
   - A **sticky header** with the title (“SmarTube”), an **expand/minimize** button (`⤢` / `−`), and a **settings (⚙️)** button.
   - A body containing:
-    - A **custom action buttons** area (user-defined reusable prompts; includes built-in “Summarize” and “Transcript” actions).
+    - A **custom action buttons** area (user-defined reusable prompts; includes built-in “Summarize”, “Transcript + Time”, and “Transcript Text” actions).
     - A **messages/chat** area where actions, questions, and responses appear (user messages align right, assistant messages align left; lists render inside bubbles).
+    - Assistant messages include a per-message **read-aloud** control (play/stop).
   - A **sticky footer** with a textarea (“Ask anything about this video...”) and a send button (➤).
 - Clicking the header (excluding header buttons) toggles collapse/expand via the `collapsed` class.
 - Clicking the settings button opens the extension options page.
@@ -58,6 +59,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
   - A placeholder message (e.g. “Summarize in progress…”) is inserted.
   - `content.js` sends `runCustomPrompt` to `background.js` with `{ actionId, url, label }`.
   - `background.js` retrieves transcript through a per-video cache (memory + `chrome.storage.session`); on cache miss it fetches Supadata timestamped chunks (`/v1/transcript`, `text=false`) and normalizes them for prompt/display use, then either calls Gemini (`mode: gemini`) or returns timestamped/plain transcript output (`mode: transcript_timestamps` / `mode: transcript_text`).
+  - For Gemini-mode custom actions, `background.js` prepends reusable timestamp-citation formatting rules so time-related outputs cite exact transcript timestamps (`[MM:SS]` or `[HH:MM:SS]`).
   - The placeholder is replaced with the Markdown-rendered result (Showdown.js).
   - Timestamp labels rendered in assistant messages are clickable and seek the YouTube player to the matching time.
 
@@ -67,7 +69,16 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 - The input is cleared; the question is appended to chat; a “Thinking…” placeholder is inserted.
 - `content.js` sends `askQuestion` to `background.js` with `{ question, url }`.
 - `background.js` reuses the same per-video transcript cache (fetching Supadata only on miss/expiry) and calls Gemini using transcript text that includes timestamps, with a prompt that instructs the model to answer **based only on the transcript**, in the configured `summaryLanguage`.
+- Q&A prompts include explicit formatting rules for time-related questions: cite exact transcript timestamps and format them only as `[MM:SS]` or `[HH:MM:SS]`.
 - `background.js` sends an `answerResponse` message back to the content script, which replaces the placeholder with the Markdown-rendered answer (or an error).
+
+### Read Aloud
+
+- Read-aloud is implemented client-side in `content.js` using the browser Speech Synthesis API.
+- Playback is **manual-only** (no autoplay): users click play/stop on an assistant message bubble.
+- A single playback session is active at a time; starting another message stops the current one.
+- Spoken content uses the rendered plain text from assistant messages (not raw Markdown).
+- Playback is stopped defensively on container teardown/video navigation/reload.
 
 ### YouTube SPA Navigation Handling
 
@@ -88,12 +99,20 @@ YouTube navigates without full reloads; the extension handles this by:
   - `auto` detects YouTube’s theme via the `dark` attribute on `<html>`.
   - Applies `.dark-theme` class to the container accordingly.
   - Theme updates propagate via `chrome.runtime` messages (`updateTheme`).
+  - Panel/chat styles use explicit theme tokens (including dark-mode message surfaces) to avoid YouTube page-theme inheritance conflicts.
 - Font size:
   - Stored in `chrome.storage.sync` as `fontSize`.
   - Applied to the container via CSS variable `--summary-font-size`.
 - Summary language:
   - Stored as `summaryLanguage` (`auto`, `en`, `ar`, `fr`, `es`).
   - `background.js` converts this into a language instruction injected into prompts, including Q&A answers.
+- Read-aloud settings:
+  - Stored as `readAloudEnabled`, `readAloudLanguage`, `readAloudRate`, `readAloudPitch`.
+  - Language options: `auto`, `en`, `ar`, `fr`, `es`.
+  - Voice speed and pitch are configurable in options and applied by content-script playback.
+- Options autosave:
+  - General settings auto-save on input/change with a short debounce (save button removed).
+  - Options page displays a transient top-centered status pill for save feedback.
 
 ## Architecture / System Patterns
 
@@ -122,6 +141,7 @@ graph TD
 ### Key technical decisions
 
 1) **Message passing:** `chrome.runtime.sendMessage` / `onMessage` keep UI logic in `content.js` and network + key handling in `background.js`.
+   - `content.js` wraps runtime messaging in a safety helper that guards invalid extension context and `chrome.runtime.lastError`, so users get actionable UI errors (for example, refresh tab after extension reload).
 
 2) **Persistent config:** `chrome.storage.sync` stores:
 - `geminiApiKey`
@@ -132,6 +152,10 @@ graph TD
 - `initialCollapsed`
 - `summaryLanguage`
 - `fontSize`
+- `readAloudEnabled`
+- `readAloudLanguage`
+- `readAloudRate`
+- `readAloudPitch`
 - `customActionButtons`: array of `{ id, label, prompt, mode }` (includes built-ins; `mode` can be `gemini`, `transcript_timestamps`, or `transcript_text`)
 
 3) **Supadata key resilience:** background cycles keys on explicit rate-limit signals and tracks per-key `isRateLimited`, with an active-key pointer (`activeSupadataKeyId`).
@@ -144,11 +168,13 @@ graph TD
 
 6) **Transcript caching layer:** `background.js` caches transcript text per video ID (in-memory + `chrome.storage.session`) with TTL and in-flight deduplication so repeated actions/questions on the same video avoid repeated Supadata calls.
 
+7) **Client-side read-aloud:** per-message playback is handled in `content.js` with browser speech synthesis, including chunked utterances, language/voice selection, and single-session playback state.
+
 ## Key Technologies & Concepts
 
 - **Languages:** JavaScript (extension), HTML/CSS (options + injected UI), JSON (manifest + storage), Python (optional `api/`).
 - **Chrome Extension APIs (MV3):** service worker (`background.js`), content scripts, `options_ui`, messaging (`chrome.runtime.*`), storage (`chrome.storage.sync`, `chrome.storage.session`), tab messaging (`chrome.tabs.*`).
-- **Web APIs:** `fetch`, `MutationObserver`, History API (`pushState`/`popstate`), DOM manipulation, CSS variables, `classList`, `matchMedia`.
+- **Web APIs:** `fetch`, `MutationObserver`, History API (`pushState`/`popstate`), DOM manipulation, CSS variables, `classList`, `matchMedia`, Web Speech API (`speechSynthesis` / `SpeechSynthesisUtterance`).
 - **External services:** Google Gemini API (`generativelanguage.googleapis.com`), Supadata transcript API (`api.supadata.ai`).
 - **Bundled library:** Showdown.js (`libs/showdown.min.js`) for Markdown → HTML.
 
@@ -156,8 +182,8 @@ graph TD
 
 - `manifest.json`: MV3 extension config (permissions, host permissions, content scripts, service worker, options page).
 - `background.js`: Gemini + Supadata calls, transcript fetching with key cycling, prompt building, and message handlers.
-- `content.js`: UI injection, action buttons, chat rendering, Markdown conversion, theme application, SPA navigation handling.
-- `options.html` / `options.js` / `options.css`: Options UI for keys, model selection, theme, language, font size, and custom action buttons.
+- `content.js`: UI injection, action buttons, chat rendering, Markdown conversion, read-aloud playback controls, theme application, SPA navigation handling.
+- `options.html` / `options.js` / `options.css`: Options UI for keys, model selection, theme, language, font size, read-aloud settings, and custom action buttons.
 - `styles.css`: Styles for injected panel (light/dark, layout, chat, scrollbars).
 - `libs/showdown.min.js`: Markdown → HTML converter used by the content script.
 - `api/main.py`: Optional FastAPI transcript endpoint (`/subtitles`) for experiments; not used by the extension flow.
@@ -196,6 +222,8 @@ This project uses **MIT License with Commons Clause** (free for non-commercial u
 - `background.js` caches Supadata transcripts per video for a short TTL (currently 6 hours) and limits cache size (LRU-style) to reduce repeated API calls.
 - Supadata transcript requests use `GET /v1/transcript` with timestamped output (`text=false`), and may require async polling when the API returns `202`.
 - `background.js` still supports a legacy `getSummary` message handler; the current UI primarily uses `runCustomPrompt` + `askQuestion`.
+- After extension reload/update, existing injected scripts can lose runtime context; messaging is handled defensively and may require a YouTube tab refresh.
+- Read-aloud quality/voice availability depends on browser-installed voices and environment support for Speech Synthesis.
 
 ## Status / Progress (high-level)
 
@@ -204,21 +232,23 @@ Implemented and working:
 - Transcript fetching via Supadata with multi-key management + cycling.
 - Gemini summarization + transcript-grounded Q&A.
 - Built-in transcript actions (timestamped + plain text modes) and action type badges in options.
+- Gemini prompts now enforce timestamp citation formatting for time-related summaries/Q&A.
 - Markdown rendering (Showdown), font size control, Arabic RTL detection.
+- Read-aloud playback for assistant responses with per-message play/stop controls and global settings (language/rate/pitch).
 - Robust navigation handling (History API + MutationObserver).
-- Options page for keys, model selection, theme, language, collapse, font size, and custom action buttons.
+- Options page for keys, model selection, theme, language, collapse, font size, and custom action buttons, with debounced autosave + visible status feedback.
 
 ## Future ideas / backlog
 
 (From the former `ideas.md`; update as needed.)
 
-- Add timestamps / time-linked summaries.
+- Expand timestamp support in Gemini outputs (for example, optional citations even when prompts are not explicitly time-related).
 - Improve reliability when navigating between multiple videos.
-- Fix/improve the top header layout (title + close button).
+- Polish header layout on narrow widths (title truncation + icon spacing/alignment).
 - Remove/trim `console.log` noise for production.
 - Consider a custom backend API instead of calling Gemini/Supadata directly from the extension.
-- Add more predefined helper actions beyond Summarize + Transcript (detailed summary, brief summary, key points, etc.).
-- add read aloud feature
+- Add more predefined helper actions beyond the current built-ins (detailed summary, brief summary, key points, etc.).
+- Enhance read-aloud UX (for example: optional global mini-player, queue mode, and explicit voice picker).
 
 ## Skills (Codex)
 

@@ -297,6 +297,28 @@ input[type="checkbox"] {
     line-height: 1.55;
 }
 
+.option-help-compact {
+    margin-top: 8px;
+    margin-bottom: 0;
+}
+
+.read-aloud-slider-row {
+    align-items: center;
+}
+
+.read-aloud-slider-row input[type="range"] {
+    flex: 1;
+    min-width: 220px;
+    accent-color: var(--button-bg);
+}
+
+.read-aloud-slider-value {
+    min-width: 52px;
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
 .option-help-text code {
     background-color: var(--input-bg);
     border: 1px solid var(--border-color);
@@ -460,6 +482,15 @@ input[type="checkbox"] {
     .option-item textarea,
     .option-item button {
         width: 100%;
+    }
+
+    .read-aloud-slider-row input[type="range"] {
+        width: 100%;
+    }
+
+    .read-aloud-slider-value {
+        text-align: left;
+        min-width: 0;
     }
 
     .option-item-inline-end {

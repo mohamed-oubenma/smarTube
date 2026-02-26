@@ -381,6 +381,8 @@
     color: var(--text-primary);
     align-self: flex-start;
     border-bottom-left-radius: var(--radius-bubble-tail);
+    position: relative;
+    padding-right: 42px;
 }
 
 .assistant-message#thinking-placeholder,
@@ -416,6 +418,52 @@
 
 .message a.timestamp-link-ext:hover {
     color: var(--accent-hover);
+}
+
+.message-read-aloud-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.08);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.message-read-aloud-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.message-read-aloud-btn:hover:not(:disabled) {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.message-read-aloud-btn.is-active {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
+.message-read-aloud-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.message-read-aloud-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .timestamp-link-ext {
@@ -459,6 +507,16 @@
     margin-right: 18px;
     padding-left: 0;
     padding-right: 2px;
+}
+
+.message[dir="rtl"].assistant-message {
+    padding-right: 12px;
+    padding-left: 42px;
+}
+
+.message[dir="rtl"] .message-read-aloud-btn {
+    right: auto;
+    left: 8px;
 }
 
 #summary-body-ext[dir="rtl"] .message blockquote,
@@ -559,6 +617,22 @@
 
 #youtube-summary-container-ext.dark-theme .timestamp-link-ext:focus-visible {
     outline-color: #a8c6ff;
+}
+
+#youtube-summary-container-ext.dark-theme .message-read-aloud-btn {
+    background: rgba(148, 163, 184, 0.2);
+    color: #d3deef;
+}
+
+#youtube-summary-container-ext.dark-theme .message-read-aloud-btn:hover:not(:disabled) {
+    background: rgba(138, 180, 248, 0.26);
+    color: #eef5ff;
+}
+
+#youtube-summary-container-ext.dark-theme .message-read-aloud-btn.is-active {
+    background: rgba(138, 180, 248, 0.32);
+    border-color: rgba(174, 203, 250, 0.45);
+    color: #f5f9ff;
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message#thinking-placeholder,
