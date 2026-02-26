@@ -39,7 +39,7 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
     - A **custom action buttons** area (user-defined reusable prompts; includes built-in “Summarize”, “Transcript + Time”, and “Transcript Text” actions).
     - A **messages/chat** area where actions, questions, and responses appear (user messages align right, assistant messages align left; lists render inside bubbles).
     - Assistant messages include a per-message **read-aloud** control (play/stop).
-  - A **sticky footer** with a textarea (“Ask anything about this video...”) and a send button (➤).
+  - A **sticky footer** with a textarea (“Ask anything about this video...”), a **dictation mic toggle** button, a send button (➤), and inline dictation status text.
 - Clicking the header (excluding header buttons) toggles collapse/expand via the `collapsed` class.
 - Clicking the settings button opens the extension options page.
 - Clicking the expand/minimize button toggles an **overlay reader view**:
@@ -65,7 +65,11 @@ There is also an optional `api/` FastAPI server that can fetch transcripts via `
 
 ### Q&A
 
-- The user enters a question and submits (Enter without Shift, or the send button).
+- The user can type a question or use dictation (mic button) to transcribe speech into the input, then submit manually.
+- Dictation uses browser speech recognition in the content script with live interim text updates in the textarea.
+- Mic behavior is toggle-based (start/stop), with one active capture session at a time.
+- Dictation language follows `summaryLanguage` (or browser locale when `summaryLanguage` is `auto`).
+- The user submits the question (Enter without Shift, or the send button).
 - The input is cleared; the question is appended to chat; a “Thinking…” placeholder is inserted.
 - `content.js` sends `askQuestion` to `background.js` with `{ question, url }`.
 - `background.js` reuses the same per-video transcript cache (fetching Supadata only on miss/expiry) and calls Gemini using transcript text that includes timestamps, with a prompt that instructs the model to answer **based only on the transcript**, in the configured `summaryLanguage`.
@@ -170,11 +174,13 @@ graph TD
 
 7) **Client-side read-aloud:** per-message playback is handled in `content.js` with browser speech synthesis, including chunked utterances, language/voice selection, and single-session playback state.
 
+8) **Client-side dictation:** footer mic capture is handled in `content.js` with browser speech recognition (`SpeechRecognition` / `webkitSpeechRecognition`), live interim transcript rendering, and defensive lifecycle teardown on navigation/reinjection.
+
 ## Key Technologies & Concepts
 
 - **Languages:** JavaScript (extension), HTML/CSS (options + injected UI), JSON (manifest + storage), Python (optional `api/`).
 - **Chrome Extension APIs (MV3):** service worker (`background.js`), content scripts, `options_ui`, messaging (`chrome.runtime.*`), storage (`chrome.storage.sync`, `chrome.storage.session`), tab messaging (`chrome.tabs.*`).
-- **Web APIs:** `fetch`, `MutationObserver`, History API (`pushState`/`popstate`), DOM manipulation, CSS variables, `classList`, `matchMedia`, Web Speech API (`speechSynthesis` / `SpeechSynthesisUtterance`).
+- **Web APIs:** `fetch`, `MutationObserver`, History API (`pushState`/`popstate`), DOM manipulation, CSS variables, `classList`, `matchMedia`, Web Speech API (`speechSynthesis` / `SpeechSynthesisUtterance` / `SpeechRecognition` / `webkitSpeechRecognition`).
 - **External services:** Google Gemini API (`generativelanguage.googleapis.com`), Supadata transcript API (`api.supadata.ai`).
 - **Bundled library:** Showdown.js (`libs/showdown.min.js`) for Markdown → HTML.
 
@@ -182,7 +188,7 @@ graph TD
 
 - `manifest.json`: MV3 extension config (permissions, host permissions, content scripts, service worker, options page).
 - `background.js`: Gemini + Supadata calls, transcript fetching with key cycling, prompt building, and message handlers.
-- `content.js`: UI injection, action buttons, chat rendering, Markdown conversion, read-aloud playback controls, theme application, SPA navigation handling.
+- `content.js`: UI injection, action buttons, chat rendering, Markdown conversion, read-aloud controls, dictation mic flow, theme application, SPA navigation handling.
 - `options.html` / `options.js` / `options.css`: Options UI for keys, model selection, theme, language, font size, read-aloud settings, and custom action buttons.
 - `styles.css`: Styles for injected panel (light/dark, layout, chat, scrollbars).
 - `libs/showdown.min.js`: Markdown → HTML converter used by the content script.
@@ -224,6 +230,7 @@ This project uses **MIT License with Commons Clause** (free for non-commercial u
 - `background.js` still supports a legacy `getSummary` message handler; the current UI primarily uses `runCustomPrompt` + `askQuestion`.
 - After extension reload/update, existing injected scripts can lose runtime context; messaging is handled defensively and may require a YouTube tab refresh.
 - Read-aloud quality/voice availability depends on browser-installed voices and environment support for Speech Synthesis.
+- Dictation availability/quality depends on browser speech-recognition support and microphone permissions on YouTube pages.
 
 ## Status / Progress (high-level)
 
@@ -235,6 +242,7 @@ Implemented and working:
 - Gemini prompts now enforce timestamp citation formatting for time-related summaries/Q&A.
 - Markdown rendering (Showdown), font size control, Arabic RTL detection.
 - Read-aloud playback for assistant responses with per-message play/stop controls and global settings (language/rate/pitch).
+- Dictation (speech-to-text) in the Q&A footer with live interim transcript updates and manual send flow.
 - Robust navigation handling (History API + MutationObserver).
 - Options page for keys, model selection, theme, language, collapse, font size, and custom action buttons, with debounced autosave + visible status feedback.
 
@@ -249,6 +257,7 @@ Implemented and working:
 - Consider a custom backend API instead of calling Gemini/Supadata directly from the extension.
 - Add more predefined helper actions beyond the current built-ins (detailed summary, brief summary, key points, etc.).
 - Enhance read-aloud UX (for example: optional global mini-player, queue mode, and explicit voice picker).
+- Enhance dictation UX (for example: configurable auto-send, continuous mode, and optional dedicated dictation language setting).
 
 ## Skills (Codex)
 

@@ -233,6 +233,8 @@
 #summary-footer-ext {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
     padding: 8px 10px;
     border-top: 1px solid var(--border-soft);
     background-color: var(--panel-surface-muted);
@@ -247,7 +249,7 @@
     padding: 6px 10px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-chip);
-    margin-right: 8px;
+    min-width: 0;
     font-size: 13px;
     line-height: 1.4;
     resize: none;
@@ -275,8 +277,54 @@
     transition: color 0.2s ease;
 }
 
+#qa-mic-btn-ext {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+#qa-mic-btn-ext svg {
+    width: 18px;
+    height: 18px;
+}
+
+#qa-mic-btn-ext:hover:not(:disabled) {
+    color: var(--accent);
+}
+
+#qa-mic-btn-ext.is-dictating {
+    color: var(--accent);
+}
+
+#qa-mic-btn-ext:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 #qa-send-btn-ext:hover {
     color: var(--accent);
+}
+
+#dictation-status-ext {
+    flex: 1 1 100%;
+    min-height: 15px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-tertiary);
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+#dictation-status-ext.is-visible {
+    opacity: 1;
+}
+
+#dictation-status-ext.is-error {
+    color: var(--error);
 }
 
 /* --- Chat Message Styles --- */
@@ -573,6 +621,14 @@
     background-color: var(--panel-surface-elevated);
     border-color: var(--border-strong);
     color: var(--text-primary);
+}
+
+#youtube-summary-container-ext.dark-theme #dictation-status-ext {
+    color: var(--text-tertiary);
+}
+
+#youtube-summary-container-ext.dark-theme #dictation-status-ext.is-error {
+    color: #ff9ca8;
 }
 
 #youtube-summary-container-ext.dark-theme .assistant-message {

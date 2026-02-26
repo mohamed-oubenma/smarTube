@@ -25,6 +25,9 @@ const TIMESTAMP_LINK_CLASS = 'timestamp-link-ext';
 const EXPAND_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H3v5h2V5h3V3zm13 0h-5v2h3v3h2V3zM5 16H3v5h5v-2H5v-3zm16 0h-2v3h-3v2h5v-5z" fill="currentColor"/></svg>';
 const MINIMIZE_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 3h5v5h-2V5h-3V3zM3 3h5v2H5v3H3V3zm16 18h-5v-2h3v-3h2v5zM3 16h2v3h3v2H3v-5z" fill="currentColor"/></svg>';
 const SETTINGS_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.08 7.08 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.51.4 1.05.71 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" fill="currentColor"/></svg>';
+const DICTATION_MIC_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v4a3 3 0 0 0 3 3zm5-3a1 1 0 1 0-2 0 3 3 0 0 1-6 0 1 1 0 1 0-2 0 5 5 0 0 0 4 4.9V19H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-3.1A5 5 0 0 0 17 11z" fill="currentColor"/></svg>';
+const DICTATION_STOP_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7h10v10H7z" fill="currentColor"/></svg>';
+const DICTATION_STATUS_TIMEOUT_MS = 2400;
 const READ_ALOUD_BUTTON_CLASS = 'message-read-aloud-btn';
 const READ_ALOUD_CHUNK_LIMIT = 2800;
 const READ_ALOUD_PLAY_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
@@ -47,6 +50,15 @@ let summaryLanguageSetting = 'auto';
 let readAloudSettings = { ...READ_ALOUD_DEFAULTS };
 let readAloudSessionId = 0;
 let activeReadAloudMessage = null;
+let dictationRecognition = null;
+let dictationIsListening = false;
+let dictationPermissionDenied = false;
+let dictationSessionId = 0;
+let dictationBaseInputValue = '';
+let dictationFinalTranscript = '';
+let dictationManualStopRequested = false;
+let dictationLastErrorMessage = '';
+let dictationStatusTimer = null;
 
 function removeOverlayBackdrop() {
     const existingBackdrop = document.getElementById(OVERLAY_BACKDROP_ID);
@@ -301,6 +313,326 @@ function sendRuntimeMessageSafe(message, onResponse, onError) {
         });
     } catch (error) {
         onError?.(error?.message || 'Unexpected runtime messaging error.');
+    }
+}
+
+function getSpeechRecognitionConstructor() {
+    if (typeof window === 'undefined') return null;
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function isDictationSupported() {
+    return typeof getSpeechRecognitionConstructor() === 'function';
+}
+
+function resolveDictationLanguage() {
+    if (summaryLanguageSetting && summaryLanguageSetting !== 'auto') {
+        return READ_ALOUD_LANGUAGE_TO_LOCALE[summaryLanguageSetting] || 'en-US';
+    }
+
+    if (typeof navigator?.language === 'string' && navigator.language.trim()) {
+        return navigator.language.trim();
+    }
+
+    return 'en-US';
+}
+
+function getQaInputElement() {
+    if (!summaryDiv) return null;
+    return summaryDiv.querySelector('#qa-input-ext');
+}
+
+function getDictationButtonElement() {
+    if (!summaryDiv) return null;
+    return summaryDiv.querySelector('#qa-mic-btn-ext');
+}
+
+function getDictationStatusElement() {
+    if (!summaryDiv) return null;
+    return summaryDiv.querySelector('#dictation-status-ext');
+}
+
+function clearDictationStatusTimer() {
+    if (!dictationStatusTimer) return;
+    clearTimeout(dictationStatusTimer);
+    dictationStatusTimer = null;
+}
+
+function setDictationStatus(message, isError = false, timeoutMs = DICTATION_STATUS_TIMEOUT_MS) {
+    const statusElement = getDictationStatusElement();
+    if (!statusElement) return;
+
+    clearDictationStatusTimer();
+    const safeMessage = String(message || '').trim();
+
+    statusElement.textContent = safeMessage;
+    statusElement.classList.toggle('is-visible', safeMessage.length > 0);
+    statusElement.classList.toggle('is-error', Boolean(safeMessage) && isError);
+
+    if (!safeMessage || timeoutMs <= 0) {
+        return;
+    }
+
+    dictationStatusTimer = setTimeout(() => {
+        dictationStatusTimer = null;
+        const latestStatusElement = getDictationStatusElement();
+        if (!latestStatusElement) return;
+        if (latestStatusElement.textContent === safeMessage) {
+            latestStatusElement.textContent = '';
+            latestStatusElement.classList.remove('is-visible');
+            latestStatusElement.classList.remove('is-error');
+        }
+    }, timeoutMs);
+}
+
+function updateDictationButtonState() {
+    const button = getDictationButtonElement();
+    if (!button) return;
+
+    const supported = isDictationSupported();
+    const disabled = !supported || dictationPermissionDenied;
+    const isListening = dictationIsListening && !disabled;
+
+    button.disabled = disabled;
+    button.classList.toggle('is-dictating', isListening);
+
+    if (isListening) {
+        button.innerHTML = DICTATION_STOP_ICON_SVG;
+        button.title = 'Stop dictation';
+        button.setAttribute('aria-label', 'Stop dictation');
+        return;
+    }
+
+    button.innerHTML = DICTATION_MIC_ICON_SVG;
+    if (!supported) {
+        button.title = 'Speech recognition is unavailable in this browser.';
+        button.setAttribute('aria-label', 'Speech recognition unavailable');
+    } else if (dictationPermissionDenied) {
+        button.title = 'Microphone permission denied. Reset browser permission to use dictation.';
+        button.setAttribute('aria-label', 'Microphone permission denied');
+    } else {
+        button.title = 'Start dictation';
+        button.setAttribute('aria-label', 'Start dictation');
+    }
+}
+
+function buildDictatedInputValue(interimTranscript = '') {
+    const combinedTranscript = `${dictationFinalTranscript} ${interimTranscript}`.trim();
+    if (dictationBaseInputValue && combinedTranscript) {
+        return `${dictationBaseInputValue} ${combinedTranscript}`.trim();
+    }
+    if (dictationBaseInputValue) {
+        return dictationBaseInputValue;
+    }
+    return combinedTranscript;
+}
+
+function applyDictationToInput(interimTranscript = '') {
+    const qaInput = getQaInputElement();
+    if (!qaInput) return;
+
+    const nextValue = buildDictatedInputValue(interimTranscript);
+    qaInput.value = nextValue;
+    if (containsArabic(nextValue)) {
+        qaInput.setAttribute('dir', 'rtl');
+    } else {
+        qaInput.setAttribute('dir', 'ltr');
+    }
+}
+
+function mapDictationErrorMessage(errorCode) {
+    switch (errorCode) {
+        case 'not-allowed':
+        case 'service-not-allowed':
+            return 'Microphone permission denied.';
+        case 'audio-capture':
+            return 'No microphone was detected.';
+        case 'network':
+            return 'Speech recognition network error.';
+        case 'language-not-supported':
+            return 'Dictation language is not supported.';
+        case 'no-speech':
+            return 'No speech detected. Try again.';
+        case 'aborted':
+            return 'Dictation was interrupted.';
+        default:
+            return 'Dictation failed. Please try again.';
+    }
+}
+
+function cleanupDictationRecognition() {
+    if (!dictationRecognition) return;
+    dictationRecognition.onresult = null;
+    dictationRecognition.onerror = null;
+    dictationRecognition.onend = null;
+    dictationRecognition = null;
+}
+
+function finalizeDictationSession(sessionId) {
+    if (sessionId !== dictationSessionId) return;
+
+    applyDictationToInput('');
+    const finalTranscript = dictationFinalTranscript.trim();
+    const errorMessage = dictationLastErrorMessage;
+    const wasManualStop = dictationManualStopRequested;
+
+    dictationIsListening = false;
+    cleanupDictationRecognition();
+    updateDictationButtonState();
+
+    if (errorMessage) {
+        setDictationStatus(errorMessage, true);
+    } else if (wasManualStop) {
+        setDictationStatus('Dictation stopped.', false, 1200);
+    } else if (finalTranscript) {
+        setDictationStatus('Dictation complete.', false, 1200);
+    } else {
+        setDictationStatus('No speech detected. Try again.', true);
+    }
+
+    dictationManualStopRequested = false;
+    dictationLastErrorMessage = '';
+    dictationFinalTranscript = '';
+    dictationBaseInputValue = '';
+}
+
+function startDictationCapture() {
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+    if (!SpeechRecognitionCtor) {
+        setDictationStatus('Speech recognition is unavailable in this browser.', true);
+        updateDictationButtonState();
+        return;
+    }
+
+    if (dictationPermissionDenied) {
+        setDictationStatus('Microphone permission denied. Reset permission and try again.', true);
+        updateDictationButtonState();
+        return;
+    }
+
+    if (dictationIsListening) {
+        return;
+    }
+
+    const qaInput = getQaInputElement();
+    if (!qaInput) {
+        return;
+    }
+
+    dictationSessionId += 1;
+    const sessionId = dictationSessionId;
+    const recognition = new SpeechRecognitionCtor();
+
+    dictationRecognition = recognition;
+    dictationIsListening = true;
+    dictationManualStopRequested = false;
+    dictationLastErrorMessage = '';
+    dictationBaseInputValue = qaInput.value.trim();
+    dictationFinalTranscript = '';
+
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.lang = resolveDictationLanguage();
+
+    recognition.onresult = (event) => {
+        if (sessionId !== dictationSessionId) return;
+
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            const transcript = String(result?.[0]?.transcript || '').trim();
+            if (!transcript) continue;
+
+            if (result.isFinal) {
+                dictationFinalTranscript = `${dictationFinalTranscript} ${transcript}`.trim();
+            } else {
+                interimTranscript = `${interimTranscript} ${transcript}`.trim();
+            }
+        }
+
+        applyDictationToInput(interimTranscript);
+    };
+
+    recognition.onerror = (event) => {
+        if (sessionId !== dictationSessionId) return;
+        const errorCode = String(event?.error || '');
+        if (errorCode === 'aborted' && dictationManualStopRequested) {
+            return;
+        }
+
+        if (errorCode === 'not-allowed' || errorCode === 'service-not-allowed') {
+            dictationPermissionDenied = true;
+        }
+
+        dictationLastErrorMessage = mapDictationErrorMessage(errorCode);
+    };
+
+    recognition.onend = () => {
+        finalizeDictationSession(sessionId);
+    };
+
+    try {
+        recognition.start();
+        setDictationStatus('Listening...', false, 0);
+        updateDictationButtonState();
+    } catch (error) {
+        dictationIsListening = false;
+        cleanupDictationRecognition();
+        dictationLastErrorMessage = '';
+        updateDictationButtonState();
+        setDictationStatus(`Could not start dictation: ${error?.message || 'Unknown error.'}`, true);
+    }
+}
+
+function stopDictationCapture({ forceAbort = false, silent = false } = {}) {
+    if (forceAbort) {
+        dictationSessionId += 1;
+        if (dictationRecognition) {
+            try {
+                dictationRecognition.abort();
+            } catch (error) {
+                // Ignore abort failures during teardown.
+            }
+        }
+        cleanupDictationRecognition();
+        dictationIsListening = false;
+        dictationManualStopRequested = false;
+        dictationLastErrorMessage = '';
+        dictationFinalTranscript = '';
+        dictationBaseInputValue = '';
+        if (silent) {
+            setDictationStatus('', false, 0);
+        } else {
+            setDictationStatus('Dictation stopped.', false, 1000);
+        }
+        updateDictationButtonState();
+        return;
+    }
+
+    if (!dictationIsListening || !dictationRecognition) {
+        updateDictationButtonState();
+        return;
+    }
+
+    dictationManualStopRequested = true;
+    if (!silent) {
+        setDictationStatus('Stopping dictation...', false, 0);
+    }
+
+    try {
+        dictationRecognition.stop();
+    } catch (error) {
+        dictationLastErrorMessage = `Could not stop dictation: ${error?.message || 'Unknown error.'}`;
+        finalizeDictationSession(dictationSessionId);
+    }
+}
+
+function handleDictationToggle() {
+    if (dictationIsListening) {
+        stopDictationCapture();
+    } else {
+        startDictationCapture();
     }
 }
 
@@ -876,7 +1208,9 @@ function injectSummaryDivContainer() {
                 </div>
                 <div id="summary-footer-ext">
                     <textarea id="qa-input-ext" rows="1" placeholder="Ask anything about this video..."></textarea>
+                    <button id="qa-mic-btn-ext" type="button" title="Start dictation" aria-label="Start dictation">${DICTATION_MIC_ICON_SVG}</button>
                     <button id="qa-send-btn-ext" title="Send">➤</button>
+                    <div id="dictation-status-ext" aria-live="polite"></div>
                 </div>
             `;
 
@@ -909,6 +1243,8 @@ function injectSummaryDivContainer() {
                 summaryLanguageSetting = typeof result.summaryLanguage === 'string' ? result.summaryLanguage : 'auto';
                 updateReadAloudSettingsFromStorage(result);
                 refreshReadAloudButtons();
+                updateDictationButtonState();
+                setDictationStatus('', false, 0);
 
                 if (mutated) {
                     chrome.storage.sync.set({ customActionButtons: customActions });
@@ -958,6 +1294,7 @@ function injectSummaryDivContainer() {
             });
 
             // Q&A Send Button
+            summaryDiv.querySelector('#qa-mic-btn-ext').addEventListener('click', handleDictationToggle);
             summaryDiv.querySelector('#qa-send-btn-ext').addEventListener('click', handleQuestionSubmit);
             summaryDiv.addEventListener('click', handleTimestampLinkClick);
 
@@ -975,6 +1312,7 @@ function getVideoIdFromUrl(url) {
 
 // Function to clear the existing summary container
 function clearSummaryContainer() {
+    stopDictationCapture({ forceAbort: true, silent: true });
     stopReadAloudPlayback();
 
     if (summaryDiv) {
@@ -1008,6 +1346,7 @@ function handleUrlChange() {
             injectSummaryDivContainer();
         }, 100);
     } else if (!newUrl.includes('youtube.com/watch')) {
+        stopDictationCapture({ forceAbort: true, silent: true });
         stopReadAloudPlayback();
     }
 }
@@ -1072,6 +1411,11 @@ function applyTheme(themeSetting) {
 // Handle submission of a question from the input footer
 function handleQuestionSubmit() {
     if (!summaryDiv) return;
+    if (dictationIsListening) {
+        stopDictationCapture();
+        return;
+    }
+
     const qaInput = summaryDiv.querySelector('#qa-input-ext');
     const questionText = qaInput.value.trim();
 
@@ -1148,6 +1492,7 @@ history.pushState = function() {
 
 window.addEventListener('popstate', handleUrlChange);
 window.addEventListener('beforeunload', () => {
+    stopDictationCapture({ forceAbort: true, silent: true });
     stopReadAloudPlayback();
 });
 
