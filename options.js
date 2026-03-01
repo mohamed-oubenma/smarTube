@@ -637,7 +637,7 @@ function restoreOptions() {
     // Use default values if keys aren't set
     chrome.storage.sync.get({
         geminiApiKey: '',
-        geminiModel: 'gemini-2.5-flash-lite',
+        geminiModel: 'gemini-3.1-flash',
         // supadataApiKey: '', // Old single key
         supadataApiKeys: [],     // New array for multiple keys
         activeSupadataKeyId: null, // ID of the active Supadata key

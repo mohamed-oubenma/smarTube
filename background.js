@@ -662,7 +662,7 @@ async function callGeminiGenerateContent(promptText, geminiApiKey, geminiModel, 
 async function runCustomAction(actionId, videoUrl, labelForLogs = null) {
     const {
         geminiApiKey,
-        geminiModel = 'gemini-2.5-flash-lite',
+        geminiModel = 'gemini-3.1-flash',
         summaryLanguage = 'auto',
         customActionButtons = []
     } = await chrome.storage.sync.get(['geminiApiKey', 'geminiModel', 'summaryLanguage', 'customActionButtons']);
@@ -800,7 +800,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         chrome.storage.sync.get(['geminiApiKey', 'geminiModel', 'summaryLanguage'], (items) => {
             const geminiApiKey = items.geminiApiKey;
-            const geminiModel = items.geminiModel || 'gemini-2.5-flash-lite';
+            const geminiModel = items.geminiModel || 'gemini-3.1-flash';
             const summaryLanguage = items.summaryLanguage || 'auto';
             const languageInstruction = buildLanguageInstruction(summaryLanguage);
 
